@@ -16,9 +16,12 @@
 ///
 
 #include "alignment/ReadScorer.hh"
+
+#include "blt_util/align_path.hh"
 #include "blt_util/align_path_bam_util.hh"
 #include "blt_util/align_path_util.hh"
 #include "blt_util/bam_record_util.hh"
+
 #include "common/Exceptions.hh"
 #include "manta/SVLocusScanner.hh"
 
@@ -248,10 +251,14 @@ getSVBreakendCandidateClip(
 
 
 bool
-isSemiAligned(const bam_record& bamRead, const double minSemiAlignedScore)
+isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
+		      const std::string& refSeq, const double minSemiAlignedScore)
 {
-    ALIGNPATH::path_t apath;
+	ALIGNPATH::path_t apath;
     bam_cigar_to_apath(bamRead.raw_cigar(),bamRead.n_cigar(),apath);
+    apath_add_seqmatch(qrySeq.begin(), qrySeq.end(),
+    				   refSeq.begin(), refSeq.end(),
+    		           apath);
     const double semiAlignedScore(ReadScorer::getSemiAlignedMetric(bamRead.read_size(),apath,bamRead.qual()));
 #ifdef DEBUG_SEMI_ALIGNED
     static const std::string logtag("isSemiAligned");

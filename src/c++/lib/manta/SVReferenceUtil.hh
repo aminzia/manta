@@ -28,7 +28,7 @@
 bool
 isRefRegionOverlap(
     const bam_header_info& header,
-    const pos_t extraRefEdgeSize,
+    //const pos_t extraRefEdgeSize,
     const SVCandidate& sv);
 
 
@@ -36,9 +36,18 @@ void
 getIntervalReferenceSegment(
     const std::string& referenceFilename,
     const bam_header_info& header,
-    const pos_t extraRefEdgeSize,
+    //const pos_t extraRefEdgeSize,
     const GenomeInterval& interval,
     reference_contig_segment& intervalRef);
+
+/*89     const std::string& referenceFilename,
+ 90     const bam_header_info& header,
+ 91     //const pos_t extraRefEdgeSize,
+ 92     const GenomeInterval& bpInterval,
+ 93     reference_contig_segment& intervalRefSeq,
+ 94     const pos_t beginPos,
+ 95     const pos_t endPos)
+*/
 
 
 /// extract the reference sequence around each breakend into a reference_contig_segment
@@ -51,7 +60,11 @@ void
 getSVReferenceSegments(
     const std::string& referenceFilename,
     const bam_header_info& header,
-    const pos_t extraRefEdgeSize,
+    //const pos_t extraRefEdgeSize,
     const SVCandidate& sv,
+    const pos_t beginPos1,
+    const pos_t endPos1,
+    const pos_t beginPos2,
+    const pos_t endPos2,
     reference_contig_segment& bp1ref,
     reference_contig_segment& bp2ref);

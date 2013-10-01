@@ -58,7 +58,9 @@ getBreakendReads(
     const SVBreakend& bp,
     const bool isReversed,
     ReadIndexType& readIndex,
-    AssemblyReadInput& reads) const
+    AssemblyReadInput& reads,
+    const std::string& bkptRef,
+    const int bkptOffset) const
 {
     // get search range:
     known_pos_range2 searchRange;
@@ -120,7 +122,7 @@ getBreakendReads(
 
         static const unsigned MAX_NUM_READS(1000);
         unsigned int shadowCnt(0);
-       // unsigned int semiAlignedCnt(0);
+        unsigned int semiAlignedCnt(0);
 
         while (bamStream.next() && (reads.size() < MAX_NUM_READS))
         {
@@ -190,13 +192,19 @@ getBreakendReads(
             bool isSemiAlignedKeeper(false);
             {
                 // CTS temp disable this until qual offset can be resolved
-#if 0
-                if (isSemiAligned(bamRead,_scanOpt.minSemiAlignedScoreCandidates))
+            	const std::string qry(bamRead.get_bam_read().get_string());
+            	const int alPos(bamRead.pos()-bkptOffset);
+            	const int alLen(apath_ref_length(apath));
+            	//where can I get the reference from?
+            	const std::string ref(bkptRef.substr(alPos,alLen));
+
+//#if 0
+                if (isSemiAligned(bamRead,qry,ref,_scanOpt.minSemiAlignedScoreCandidates))
                 {
                     isSemiAlignedKeeper = true;
                     ++semiAlignedCnt;
                 }
-#endif
+//#endif
             }
 
             bool isShadowKeeper(false);
@@ -255,12 +263,14 @@ getBreakendReads(
 void
 SVLocusAssembler::
 assembleSingleSVBreakend(const SVBreakend& bp,
-                         Assembly& as) const
+                         Assembly& as,
+                         const std::string& bkptRef,
+                         const int bkptOffset) const
 {
     static const bool isBpReversed(false);
     ReadIndexType readIndex;
     AssemblyReadInput reads;
-    getBreakendReads(bp, isBpReversed, readIndex, reads);
+    getBreakendReads(bp, isBpReversed, readIndex, reads, bkptRef, bkptOffset);
     AssemblyReadOutput readInfo;
     runSmallAssembler(_assembleOpt, reads, readInfo, as);
 }
@@ -273,15 +283,19 @@ assembleSVBreakends(const SVBreakend& bp1,
                     const SVBreakend& bp2,
                     const bool isBp1Reversed,
                     const bool isBp2Reversed,
-                    Assembly& as) const
+                    Assembly& as,
+                    const std::string& bkptRef1,
+                    const int bkptOffset1,
+                    const std::string& bkptRef2,
+                    const int bkptOffset2) const
 {
     ReadIndexType readIndex;
     AssemblyReadInput reads;
-    AssemblyReadReversal readRev;
-    getBreakendReads(bp1, isBp1Reversed, readIndex, reads);
-    readRev.resize(reads.size(),isBp1Reversed);
-    getBreakendReads(bp2, isBp2Reversed, readIndex, reads);
-    readRev.resize(reads.size(),isBp2Reversed);
+    //AssemblyReadReversal readRev;
+    getBreakendReads(bp1, isBp1Reversed, readIndex, reads, bkptRef1, bkptOffset1);
+    //readRev.resize(reads.size(),isBp1Reversed);
+    getBreakendReads(bp2, isBp2Reversed, readIndex, reads, bkptRef2, bkptOffset2);
+    //readRev.resize(reads.size(),isBp2Reversed);
     AssemblyReadOutput readInfo;
     runSmallAssembler(_assembleOpt, reads, readInfo, as);
 }

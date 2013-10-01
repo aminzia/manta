@@ -48,16 +48,11 @@ trimOverlappingRange(
 static
 void
 getBpReferenceInterval(
-    const bam_header_info& header,
-    const pos_t extraRefEdgeSize,
     const GenomeInterval& bpInterval,
-    GenomeInterval& refInterval)
+    GenomeInterval& refInterval,
+    const pos_t& beginPos,
+    const pos_t& endPos)
 {
-    const bam_header_info::chrom_info& chromInfo(header.chrom_data[bpInterval.tid]);
-
-    const pos_t beginPos(std::max(0, (bpInterval.range.begin_pos()-extraRefEdgeSize)));
-    const pos_t endPos(std::min(static_cast<pos_t>(chromInfo.length), (bpInterval.range.end_pos()+extraRefEdgeSize)));
-
     refInterval.tid = bpInterval.tid;
     refInterval.range.set_begin_pos(beginPos);
     refInterval.range.set_end_pos(endPos);
@@ -65,7 +60,7 @@ getBpReferenceInterval(
 
 
 /// given a reference extraction interval, produce the corresponding ref contig segment
-static
+//static
 void
 getIntervalReferenceSegment(
     const std::string& referenceFilename,
@@ -93,12 +88,14 @@ void
 getIntervalReferenceSegment(
     const std::string& referenceFilename,
     const bam_header_info& header,
-    const pos_t extraRefEdgeSize,
+    //const pos_t extraRefEdgeSize,
     const GenomeInterval& bpInterval,
-    reference_contig_segment& intervalRefSeq)
+    reference_contig_segment& intervalRefSeq,
+    const pos_t beginPos,
+    const pos_t endPos)
 {
     GenomeInterval refInterval;
-    getBpReferenceInterval(header, extraRefEdgeSize, bpInterval, refInterval);
+    getBpReferenceInterval(bpInterval, refInterval, beginPos, endPos);
 
     getIntervalReferenceSegment(referenceFilename, header, refInterval, intervalRefSeq);
 }
@@ -107,15 +104,19 @@ getIntervalReferenceSegment(
 
 bool
 isRefRegionOverlap(
-    const bam_header_info& header,
-    const pos_t extraRefEdgeSize,
-    const SVCandidate& sv)
+    //const bam_header_info& header,
+    //const pos_t extraRefEdgeSize,
+    const SVCandidate& sv,
+    const pos_t beginPos1,
+    const pos_t endPos1,
+    const pos_t beginPos2,
+    const pos_t endPos2)
 {
     if (sv.bp1.interval.tid != sv.bp2.interval.tid) return false;
     GenomeInterval bp1RefInterval;
     GenomeInterval bp2RefInterval;
-    getBpReferenceInterval(header,extraRefEdgeSize,sv.bp1.interval,bp1RefInterval);
-    getBpReferenceInterval(header,extraRefEdgeSize,sv.bp2.interval,bp2RefInterval);
+    getBpReferenceInterval(sv.bp1.interval,bp1RefInterval,beginPos1,endPos1);
+    getBpReferenceInterval(sv.bp2.interval,bp2RefInterval,beginPos2,endPos2);
 
     return (bp1RefInterval.isIntersect(bp2RefInterval));
 }
@@ -126,15 +127,21 @@ void
 getSVReferenceSegments(
     const std::string& referenceFilename,
     const bam_header_info& header,
-    const pos_t extraRefEdgeSize,
+//    const pos_t extraRefEdgeSize,
     const SVCandidate& sv,
+    const pos_t beginPos1,
+    const pos_t endPos1,
+    const pos_t beginPos2,
+    const pos_t endPos2,
     reference_contig_segment& bp1ref,
     reference_contig_segment& bp2ref)
 {
     GenomeInterval bp1RefInterval;
     GenomeInterval bp2RefInterval;
-    getBpReferenceInterval(header,extraRefEdgeSize,sv.bp1.interval,bp1RefInterval);
-    getBpReferenceInterval(header,extraRefEdgeSize,sv.bp2.interval,bp2RefInterval);
+
+    getBpReferenceInterval(sv.bp1.interval,bp1RefInterval,beginPos1,endPos1);
+    getBpReferenceInterval(sv.bp2.interval,bp1RefInterval,beginPos2,endPos2);
+
 
     // allow overlap (best performance in case of breakends in opposite orientations...:
 #if 0
@@ -146,6 +153,6 @@ getSVReferenceSegments(
     }
 #endif
 
-    getIntervalReferenceSegment(referenceFilename, header, bp1RefInterval, bp1ref);
-    getIntervalReferenceSegment(referenceFilename, header, bp2RefInterval, bp2ref);
+    getIntervalReferenceSegment(referenceFilename, header, bp1RefInterval, bp1ref, beginPos1, endPos1);
+    getIntervalReferenceSegment(referenceFilename, header, bp2RefInterval, bp2ref, beginPos2, endPos2);
 }
