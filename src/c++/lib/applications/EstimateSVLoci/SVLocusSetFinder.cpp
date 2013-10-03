@@ -171,7 +171,8 @@ process_pos(const int stage_no,
 void
 SVLocusSetFinder::
 update(const bam_record& bamRead,
-       const unsigned defaultReadGroupIndex)
+       const unsigned defaultReadGroupIndex,
+       const std::string& bkptRef)
 {
     _isScanStarted=true;
 
@@ -190,7 +191,7 @@ update(const bam_record& bamRead,
     bool isLocalAssemblyEvidence(false);
     if (! isLargeAnomalous)
     {
-        isLocalAssemblyEvidence = _readScanner.isLocalAssemblyEvidence(bamRead);
+        isLocalAssemblyEvidence = _readScanner.isLocalAssemblyEvidence(bamRead,bkptRef);
     }
 
     if (! ( isLargeAnomalous || isLocalAssemblyEvidence))

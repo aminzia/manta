@@ -122,7 +122,8 @@ struct SVLocusScanner
     /// interfere with larger event discovery if not kept under control
     bool
     isLocalAssemblyEvidence(
-        const bam_record& bamRead) const;
+        const bam_record& bamRead,
+        const std::string& bkptRef) const;
 
     /// a read is a shadow if it is unaligned but its partner aligns confidently
     bool

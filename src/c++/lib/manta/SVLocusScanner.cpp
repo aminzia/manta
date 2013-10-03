@@ -869,14 +869,22 @@ isLargeFragment(
 bool
 SVLocusScanner::
 isLocalAssemblyEvidence(
-    const bam_record& bamRead) const
+    const bam_record& bamRead,
+    const std::string& bkptRef) const
 {
     using namespace ALIGNPATH;
 
     {
-        // TODO: (1) double check semi-aligned thresholds with fixed qual offsets
-        // TODO: For the semi-aligned test to be effective, we need to convert the cigar string to contain match/mis-match infomration first
-      //  if (isSemiAligned(bamRead,_opt.minSemiAlignedScoreGraph)) return true;
+    	const std::string qry(bamRead.get_bam_read().get_string());
+    	const int alPos(bamRead.pos());
+        ALIGNPATH::path_t apath;
+        bam_cigar_to_apath(bamRead.raw_cigar(), bamRead.n_cigar(), apath);
+    	const int alLen(apath_ref_length(apath));
+    	const std::string ref(bkptRef.substr(alPos,alLen));
+    	std::cerr << "isLocalAssemblyEvidence :\n";
+    	std::cerr << "ref = " << ref << std::endl;
+    	std::cerr << "qry = " << qry << std::endl;
+    	if (isSemiAligned(bamRead,qry,ref,_opt.minSemiAlignedScoreGraph)) return true;
     }
 
     const SimpleAlignment bamAlign(bamRead);

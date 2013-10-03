@@ -191,20 +191,18 @@ getBreakendReads(
 
             bool isSemiAlignedKeeper(false);
             {
-                // CTS temp disable this until qual offset can be resolved
             	const std::string qry(bamRead.get_bam_read().get_string());
             	const int alPos(bamRead.pos()-bkptOffset);
             	const int alLen(apath_ref_length(apath));
-            	//where can I get the reference from?
             	const std::string ref(bkptRef.substr(alPos,alLen));
-
-//#if 0
+            	std::cerr << "getBreakendReads :\n";
+            	std::cerr << "ref = " << ref << std::endl;
+            	std::cerr << "qry = " << qry << std::endl;
                 if (isSemiAligned(bamRead,qry,ref,_scanOpt.minSemiAlignedScoreCandidates))
                 {
                     isSemiAlignedKeeper = true;
                     ++semiAlignedCnt;
                 }
-//#endif
             }
 
             bool isShadowKeeper(false);

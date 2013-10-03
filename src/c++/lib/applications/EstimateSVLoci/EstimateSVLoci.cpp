@@ -20,9 +20,13 @@
 #include "SVLocusSetFinder.hh"
 
 #include "blt_util/bam_header_util.hh"
+#include "blt_util/align_path_bam_util.hh"
 #include "blt_util/input_stream_handler.hh"
 #include "blt_util/log.hh"
+
 #include "common/OutStream.hh"
+
+#include "manta/SVReferenceUtil.hh"
 
 #include "boost/foreach.hpp"
 #include "boost/shared_ptr.hpp"
@@ -82,6 +86,9 @@ runESL(const ESLOptions& opt)
 
     const GenomeInterval scanRegion(tid,beginPos,endPos);
 
+    reference_contig_segment refSegment;
+    getIntervalReferenceSegment(opt.referenceFilename,bamHeader,scanRegion,refSegment);
+
     SVLocusSetFinder locusFinder(opt,scanRegion);
     locusFinder.setBamHeader(header);
 
@@ -106,7 +113,16 @@ runESL(const ESLOptions& opt)
         const bam_streamer& readStream(*bamStreams[current.sample_no]);
         const bam_record& read(*(readStream.get_record_ptr()));
 
-        locusFinder.update(read,current.sample_no);
+        std::string ref;
+        {
+            ALIGNPATH::path_t apath;
+            bam_cigar_to_apath(read.raw_cigar(), read.n_cigar(), apath);
+        	const int alPos(read.pos()-scanRegion.range.begin_pos());
+        	const int alLen(apath_ref_length(apath));
+            ref = refSegment.seq().substr(alPos,alLen);
+        }
+
+        locusFinder.update(read,current.sample_no,ref);
     }
 
     // finished updating:

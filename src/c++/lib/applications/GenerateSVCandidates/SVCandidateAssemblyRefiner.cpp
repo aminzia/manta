@@ -443,7 +443,7 @@ getJumpAssembly(
             const SV_TYPE::index_t svType(getSVType(sv));
             if ((svType == SV_TYPE::INDEL) || (svType == SV_TYPE::COMPLEX))
             {
-                if ( isRefRegionOverlap( _header,sv) )
+                if ( isRefRegionOverlap( _header,extraRefEdgeSize,sv) )
                 {
                     // transform SV into a single region format:
                     SVCandidate singleSV = sv;
@@ -509,12 +509,12 @@ getJumpAssembly(
     const pos_t beginPos2(std::max(0, (sv.bp1.interval.range.begin_pos()-extraRefEdgeSize)));
     const pos_t endPos2(std::min(static_cast<pos_t>(chromInfo2.length), (sv.bp1.interval.range.end_pos()+extraRefEdgeSize)));
 
-    getSVReferenceSegments(_opt.referenceFilename, _header, /*extraRefEdgeSize,*/ sv, beginPos1, endPos1, beginPos2, endPos2, assemblyData.bp1ref, assemblyData.bp2ref);
+    getSVReferenceSegments(_opt.referenceFilename, _header, sv, beginPos1, endPos1, beginPos2, endPos2, assemblyData.bp1ref, assemblyData.bp2ref);
 
     // assemble contig spanning the breakend:
     _spanningAssembler.assembleSVBreakends(sv.bp1, sv.bp2, isBp1Reversed, isBp2Reversed, assemblyData.contigs, assemblyData.bp1ref.seq(), beginPos1, assemblyData.bp2ref.seq(), beginPos2);
 
-    getSVReferenceSegments(_opt.referenceFilename, _header, /*extraRefEdgeSize,*/ sv,  beginPos1, endPos1, beginPos2, endPos2, assemblyData.bp1ref, assemblyData.bp2ref);
+    getSVReferenceSegments(_opt.referenceFilename, _header, sv,  beginPos1, endPos1, beginPos2, endPos2, assemblyData.bp1ref, assemblyData.bp2ref);
     const std::string* align1RefStrPtr(&assemblyData.bp1ref.seq());
     const std::string* align2RefStrPtr(&assemblyData.bp2ref.seq());
 
