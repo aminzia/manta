@@ -194,10 +194,8 @@ getBreakendReads(
             	const std::string qry(bamRead.get_bam_read().get_string());
             	const int alPos(bamRead.pos()-bkptOffset);
             	const int alLen(apath_ref_length(apath));
-            	const std::string ref(bkptRef.substr(alPos,alLen));
+            	const std::string ref(bkptRef.substr((alPos-1),alLen));
             	std::cerr << "getBreakendReads :\n";
-            	std::cerr << "ref = " << ref << std::endl;
-            	std::cerr << "qry = " << qry << std::endl;
                 if (isSemiAligned(bamRead,qry,ref,_scanOpt.minSemiAlignedScoreCandidates))
                 {
                     isSemiAlignedKeeper = true;

@@ -113,7 +113,16 @@ runESL(const ESLOptions& opt)
         const bam_streamer& readStream(*bamStreams[current.sample_no]);
         const bam_record& read(*(readStream.get_record_ptr()));
 
-        locusFinder.update(read,current.sample_no,refSegment.seq());
+        std::string ref;
+        {
+            ALIGNPATH::path_t apath;
+            bam_cigar_to_apath(read.raw_cigar(), read.n_cigar(), apath);
+        	const int alPos(read.pos()-scanRegion.range.begin_pos());
+        	const int alLen(apath_ref_length(apath));
+            ref = refSegment.seq().substr((alPos-1),alLen);
+        }
+
+        locusFinder.update(read,current.sample_no,ref);
     }
 
     // finished updating:

@@ -250,10 +250,13 @@ getSVBreakendCandidateClip(
 
 
 
+// TODO: pass iterator instead of ref substring
 bool
 isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
 		      const std::string& refSeq, const double minSemiAlignedScore)
 {
+	// read cannot be semi-aligned in unmapped
+	if (bamRead.is_unmapped()) return false;
 	ALIGNPATH::path_t apath;
     bam_cigar_to_apath(bamRead.raw_cigar(),bamRead.n_cigar(),apath);
 
@@ -885,13 +888,11 @@ isLocalAssemblyEvidence(
     using namespace ALIGNPATH;
 
     {
+    	std::cerr << "isLocalAssemblyEvidence :\n";
     	const std::string qry(bamRead.get_bam_read().get_string());
     	const int alPos(bamRead.pos());
         ALIGNPATH::path_t apath;
         bam_cigar_to_apath(bamRead.raw_cigar(), bamRead.n_cigar(), apath);
-    	const int alLen(apath_ref_length(apath));
-    	const std::string ref(bkptRef.substr(alPos,alLen));
-    	std::cerr << "isLocalAssemblyEvidence :\n";
     	if (isSemiAligned(bamRead,qry,ref,_opt.minSemiAlignedScoreGraph)) return true;
     }
 
