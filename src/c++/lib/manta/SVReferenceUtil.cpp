@@ -98,7 +98,6 @@ getIntervalReferenceSegment(
     assert(static_cast<pos_t>(intervalRefSeq.seq().size()) == (static_cast<pos_t>(range.size())));
 }
 
-
 static
 void
 getIntervalReferenceSegmentByPos(

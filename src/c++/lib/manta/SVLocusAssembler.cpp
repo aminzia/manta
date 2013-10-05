@@ -192,15 +192,17 @@ getBreakendReads(
             bool isSemiAlignedKeeper(false);
             {
             	const std::string qry(bamRead.get_bam_read().get_string());
-            	const int alPos(bamRead.pos()-bkptOffset);
+            	const int alPos(bamRead.pos()-bkptOffset-1);
             	const int alLen(apath_ref_length(apath));
-            	const std::string ref(bkptRef.substr((alPos-1),alLen));
-            	std::cerr << "getBreakendReads :\n";
-                if (isSemiAligned(bamRead,qry,ref,_scanOpt.minSemiAlignedScoreCandidates))
-                {
-                    isSemiAlignedKeeper = true;
-                    ++semiAlignedCnt;
-                }
+            	if (alPos >= 0) {
+            		const std::string ref(bkptRef.substr(alPos,alLen));
+            		//std::cerr << "getBreakendReads :\n";
+            		if (isSemiAligned(bamRead,qry,ref,_scanOpt.minSemiAlignedScoreCandidates))
+            		{
+            			isSemiAlignedKeeper = true;
+            			++semiAlignedCnt;
+            		}
+            	}
             }
 
             bool isShadowKeeper(false);

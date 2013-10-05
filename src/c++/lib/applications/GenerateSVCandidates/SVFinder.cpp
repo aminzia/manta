@@ -20,6 +20,7 @@
 #include "blt_util/bam_streamer.hh"
 #include "common/Exceptions.hh"
 #include "manta/ReadGroupStatsSet.hh"
+#include "blt_util/bam_header_util.hh"
 
 #include "boost/foreach.hpp"
 
@@ -40,7 +41,8 @@ static const bool isExcludeUnpaired(true);
 SVFinder::
 SVFinder(const GSCOptions& opt) :
     _scanOpt(opt.scanOpt),
-    _readScanner(_scanOpt,opt.statsFilename,opt.alignFileOpt.alignmentFilename)
+    _readScanner(_scanOpt,opt.statsFilename,opt.alignFileOpt.alignmentFilename),
+    _referenceFilename(opt.referenceFilename)
 {
     // load in set:
     _set.load(opt.graphFilename.c_str(),true);
@@ -102,7 +104,7 @@ addSVNodeRead(
 
     typedef std::vector<SVLocus> loci_t;
     loci_t loci;
-    scanner.getSVLoci(bamRead,bamIndex,loci);
+    scanner.getSVLoci(bamRead,bamIndex,loci,"NA",false);
 
     BOOST_FOREACH(const SVLocus& locus, loci)
     {
@@ -404,7 +406,7 @@ getCandidatesFromData(
             const bam_record* remoteBamRecPtr( remoteReadPtr->isSet() ? &(remoteReadPtr->bamrec) : NULL);
 
             readCandidates.clear();
-            _readScanner.getBreakendPair(localReadPtr->bamrec, remoteBamRecPtr, bamIndex, readCandidates);
+            _readScanner.getBreakendPair(localReadPtr->bamrec, remoteBamRecPtr, bamIndex, readCandidates,false);
 
 #ifdef DEBUG_SVDATA
             log_os << "Checking pair: " << pair << "\n";

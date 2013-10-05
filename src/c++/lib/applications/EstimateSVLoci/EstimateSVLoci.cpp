@@ -119,6 +119,7 @@ runESL(const ESLOptions& opt)
             bam_cigar_to_apath(read.raw_cigar(), read.n_cigar(), apath);
         	const int alPos(read.pos()-scanRegion.range.begin_pos());
         	const int alLen(apath_ref_length(apath));
+        	if (alPos < 0) continue;
             ref = refSegment.seq().substr((alPos-1),alLen);
         }
 
