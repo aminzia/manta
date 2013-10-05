@@ -504,11 +504,13 @@ getJumpAssembly(
     }
 
     const bam_header_info::chrom_info& chromInfo1(_header.chrom_data[sv.bp1.interval.tid]);
-    const bam_header_info::chrom_info& chromInfo2(_header.chrom_data[sv.bp1.interval.tid]);
+    const bam_header_info::chrom_info& chromInfo2(_header.chrom_data[sv.bp2.interval.tid]);
     const pos_t beginPos1(std::max(0, (sv.bp1.interval.range.begin_pos()-extraRefEdgeSize)));
     const pos_t endPos1(std::min(static_cast<pos_t>(chromInfo1.length), (sv.bp1.interval.range.end_pos()+extraRefEdgeSize)));
-    const pos_t beginPos2(std::max(0, (sv.bp1.interval.range.begin_pos()-extraRefEdgeSize)));
-    const pos_t endPos2(std::min(static_cast<pos_t>(chromInfo2.length), (sv.bp1.interval.range.end_pos()+extraRefEdgeSize)));
+    const pos_t beginPos2(std::max(0, (sv.bp2.interval.range.begin_pos()-extraRefEdgeSize)));
+    const pos_t endPos2(std::min(static_cast<pos_t>(chromInfo2.length), (sv.bp2.interval.range.end_pos()+extraRefEdgeSize)));
+
+    //std::cout << "chrom length=" << chromInfo1.length << " " << chromInfo2.length << std::endl;
 
     getSVReferenceSegments(_opt.referenceFilename, _header, sv, beginPos1, endPos1, beginPos2, endPos2, assemblyData.bp1ref, assemblyData.bp2ref);
 
@@ -676,7 +678,6 @@ getSmallSVAssembly(
 
     //const bam_header_info::chrom_info& chromInfo(_header.chrom_data[sv.bp1.interval.tid]);
     const pos_t beginPos(std::max(0, (sv.bp1.interval.range.begin_pos()-extraRefEdgeSize)));
-    //const pos_t endPos(std::min(static_cast<pos_t>(chromInfo.length), (sv.bp1.interval.range.end_pos()+extraRefEdgeSize)));
 
     _smallSVAssembler.assembleSingleSVBreakend(sv.bp1, assemblyData.contigs, assemblyData.bp1ref.seq(), beginPos);
 
