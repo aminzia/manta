@@ -256,10 +256,17 @@ isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
 {
 	ALIGNPATH::path_t apath;
     bam_cigar_to_apath(bamRead.raw_cigar(),bamRead.n_cigar(),apath);
+
+	std::cerr << "ref = " << refSeq << std::endl;
+	std::cerr << "qry = " << qrySeq << std::endl;
+    std::cerr << "apath = " << apath << std::endl;
     apath_add_seqmatch(qrySeq.begin(), qrySeq.end(),
     				   refSeq.begin(), refSeq.end(),
     		           apath);
+    std::cerr << "apath = " << apath << std::endl;
+
     const double semiAlignedScore(ReadScorer::getSemiAlignedMetric(bamRead.read_size(),apath,bamRead.qual()));
+    std::cerr << " semi-aligned score=" << semiAlignedScore << "\n";
 #ifdef DEBUG_SEMI_ALIGNED
     static const std::string logtag("isSemiAligned");
     log_os << logtag << " semi-aligned score=" << semiAlignedScore << " read qname=" << bamRead.qname() << " apath=" << apath <<  std::endl;
@@ -882,8 +889,6 @@ isLocalAssemblyEvidence(
     	const int alLen(apath_ref_length(apath));
     	const std::string ref(bkptRef.substr(alPos,alLen));
     	std::cerr << "isLocalAssemblyEvidence :\n";
-    	std::cerr << "ref = " << ref << std::endl;
-    	std::cerr << "qry = " << qry << std::endl;
     	if (isSemiAligned(bamRead,qry,ref,_opt.minSemiAlignedScoreGraph)) return true;
     }
 
