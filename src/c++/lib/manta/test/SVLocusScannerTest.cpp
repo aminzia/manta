@@ -52,13 +52,14 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromSemiAligned )
     ReadScannerOptions opt;
 
     ALIGNPATH::path_t inputPath;
-    cigar_to_apath("3=7X",inputPath);
+    cigar_to_apath("56M44S",inputPath);
 
     bam_record bamRead;
     bam1_t* bamDataPtr(bamRead.get_data());
     edit_bam_cigar(inputPath,*bamDataPtr);
 
-    static const char testSeq[] = "ACGTTACGTT";
+    static const char testSeq[] = "AACCCACAAACATCACACACATACCCGTAATATTTTCATTGACTGCATTAGATTCTTCTACAGTGCGTCTAAGAGTCCAGAGACCGACTTTTTTCTAAAA";
+    static const char testRef[] = "AACCCACAAACATCACACACATAACCGTAATATTTTCATTGACTGCCTGATATTCT";
 
     // initialize test qual array to all Q30's:
     static const unsigned seqSize((sizeof(testSeq)-1)/sizeof(char));
@@ -72,7 +73,7 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromSemiAligned )
 
     std::vector<SVCandidate> candidates;
 
-    getSVCandidatesFromSemiAligned(opt,bamRead,align,candidates);
+    getSVCandidatesFromSemiAligned(opt,bamRead,align,candidates,testRef);
 
     BOOST_REQUIRE_EQUAL(candidates.size(),1u);
     BOOST_REQUIRE(candidates[0].bp1.interval.range.is_pos_intersect(500));

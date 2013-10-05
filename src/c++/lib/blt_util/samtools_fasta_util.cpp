@@ -150,6 +150,28 @@ get_region_seq(const std::string& ref_file,
     fai_destroy(fai);
 }
 
+void
+get_seq(const std::string& ref_file,
+        const std::string& chrom,
+        std::string& ref_seq)
+{
+    faidx_t* fai(fai_load(ref_file.c_str()));
+    // TODO: This is very bad but I don't have a clue how to do this in a better way
+    std::string fai_file = ref_file + ".fai";
+    unsigned end_pos = get_chrom_length(fai_file,chrom);
+    int len; // throwaway...
+    char* ref_tmp(faidx_fetch_seq(fai,const_cast<char*>(chrom.c_str()), 0, end_pos, &len));
+    if (NULL == ref_tmp)
+    {
+        std::ostringstream oss;
+        oss << "ERROR: Can't find sequence region '" << chrom << ":" << (1) << "-" << (end_pos+1) << "' in reference file: '" << ref_file << "'\n";
+        throw blt_exception(oss.str().c_str());
+    }
+    ref_seq.assign(ref_tmp);
+    free(ref_tmp);
+    fai_destroy(fai);
+}
+
 
 
 void

@@ -46,7 +46,6 @@ getIntervalReferenceSegment(
     const GenomeInterval& interval,
     reference_contig_segment& intervalRef);
 
-
 /// extract the reference sequence around each breakend into a reference_contig_segment
 /// object
 ///

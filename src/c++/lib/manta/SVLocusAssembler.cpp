@@ -192,7 +192,7 @@ getBreakendReads(
             bool isSemiAlignedKeeper(false);
             {
             	const std::string qry(bamRead.get_bam_read().get_string());
-            	const int alPos(bamRead.pos()-bkptOffset);
+            	const int alPos(bamRead.pos()-bkptOffset-1);
             	const int alLen(apath_ref_length(apath));
                 if (alPos >= 0 && (alPos+alLen) < bkptRef.size()) 
                 {

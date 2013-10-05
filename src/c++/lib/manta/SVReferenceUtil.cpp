@@ -102,7 +102,6 @@ getIntervalReferenceSegment(
     }
 }
 
-
 static
 void
 getIntervalReferenceSegmentByPos(

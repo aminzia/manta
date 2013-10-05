@@ -334,16 +334,15 @@ getSVCandidatesFromSemiAligned(
     const ReadScannerOptions& opt,
     const bam_record& bamRead,
     const SimpleAlignment& bamAlign,
-    std::vector<SVCandidate>& candidates)
+    std::vector<SVCandidate>& candidates,
+    const std::string& bkptRef)
 {
     // semi-aligned reads don't define a full hypothesis, so they're always evidence for a 'complex' ie. undefined, event
     // in a fashion analogous to clipped reads
     static const bool isComplex(true);
+   	const std::string qry(bamRead.get_bam_read().get_string());
 
-    const double semiAlignedScore(ReadScorer::getSemiAlignedMetric(bamRead.read_size(),bamAlign.path,bamRead.qual()));
-
-    //std::cout << "getSVCandidatesFromSemiAligned : semi-aligned score is " << semiAlignedScore << std::endl;
-    if (semiAlignedScore>opt.minSemiAlignedScoreGraph)
+   	if (isSemiAligned(bamRead,qry,bkptRef,opt.minSemiAlignedScoreGraph))
     {
         const pos_t pos(bamAlign.pos);
         candidates.push_back(GetSplitSVCandidate(opt,bamRead.target_id(),pos,pos,isComplex));
@@ -535,8 +534,6 @@ getSVCandidatesFromPair(
 /// look for singletons, create candidateSV around conf. interval of shadow position
 /// cache singletons? might be needed to remove poor quality shadows.
 /// should be able to re-use code, follow soft-clipping example.
-#if 0
-static
 void
 getSVCandidatesFromShadow(
     const ReadScannerOptions& opt,
@@ -591,7 +588,7 @@ getSVCandidatesFromShadow(
 	const pos_t shadowGenomePos = singletonGenomePos + properPairRangeOffset;
 	candidates.push_back(GetSplitSVCandidate(opt,targetId,shadowGenomePos,shadowGenomePos,isComplex));
 }
-#endif
+//#endif
 
 /// scan read record (and optionally its mate record) for SV evidence.
 //
@@ -605,7 +602,10 @@ getReadBreakendsImpl(
     const bam_record& localRead,
     const bam_record* remoteReadPtr,
     std::vector<SVCandidate>& candidates,
-    known_pos_range2& localEvidenceRange)
+    known_pos_range2& localEvidenceRange,
+    const std::string& bkptRef,
+    const bool retrieveSemiAligned)
+
 {
     /// TODO: can't handle these yet, but plan to soon:
     //if (localRead.is_mate_unmapped()) return;
@@ -630,16 +630,13 @@ getReadBreakendsImpl(
     log_os << logtag << " post-clip candidate_size: " << candidates.size() << "\n";
 #endif
 
-    // TODO: add semi-aligned read processing
-    //
-    // CTS: temporarily comment out semi-aligned read input pending review of results with corrected qual offset
-    //
-    //getSVCandidatesFromSemiAligned(opt, localRead, localAlign, candidates);
-
+    if (retrieveSemiAligned) {
+    	getSVCandidatesFromSemiAligned(opt, localRead, localAlign, candidates, bkptRef);
+    }
     // TODO: add SA tag processing
 
     // TODO: process shadow reads
-    //getSVCandidatesFromShadow(opt, rstats, localRead, localAlign,remoteReadPtr,candidates);
+    getSVCandidatesFromShadow(opt, rstats, localRead, localAlign,remoteReadPtr,candidates);
 
     // - process anomalous read pair relationships:
     getSVCandidatesFromPair(opt, rstats, localRead, localAlign, remoteReadPtr, candidates);
@@ -671,7 +668,9 @@ getSVLociImpl(
     const ReadScannerOptions& opt,
     const SVLocusScanner::CachedReadGroupStats& rstats,
     const bam_record& bamRead,
-    std::vector<SVLocus>& loci)
+    std::vector<SVLocus>& loci,
+    const std::string& bkptRef,
+    const bool retrieveSemiAligned)
 {
     using namespace illumina::common;
 
@@ -679,7 +678,7 @@ getSVLociImpl(
     std::vector<SVCandidate> candidates;
     known_pos_range2 localEvidenceRange;
 
-    getReadBreakendsImpl(opt, rstats, bamRead, NULL, candidates, localEvidenceRange);
+    getReadBreakendsImpl(opt, rstats, bamRead, NULL, candidates, localEvidenceRange, bkptRef,retrieveSemiAligned);
 
 #ifdef DEBUG_SCANNER
     static const std::string logtag("getSVLociImpl");
@@ -928,12 +927,14 @@ SVLocusScanner::
 getSVLoci(
     const bam_record& bamRead,
     const unsigned defaultReadGroupIndex,
-    std::vector<SVLocus>& loci) const
+    std::vector<SVLocus>& loci,
+    const std::string& bkptRef,
+    const bool retrieveSemiAligned) const
 {
     loci.clear();
 
     const CachedReadGroupStats& rstats(_stats[defaultReadGroupIndex]);
-    getSVLociImpl(_opt, rstats, bamRead, loci);
+    getSVLociImpl(_opt, rstats, bamRead, loci, bkptRef, retrieveSemiAligned);
     cachedQname = bamRead.qname();
     cachedMapq  = bamRead.map_qual();
 }
@@ -946,12 +947,12 @@ getBreakendPair(
     const bam_record& localRead,
     const bam_record* remoteReadPtr,
     const unsigned defaultReadGroupIndex,
-
-    std::vector<SVCandidate>& candidates) const
+    std::vector<SVCandidate>& candidates,
+    const bool retrieveSemiAligned) const
 {
     const CachedReadGroupStats& rstats(_stats[defaultReadGroupIndex]);
 
     // throw evidence range away in this case
     known_pos_range2 evidenceRange;
-    getReadBreakendsImpl(_opt, rstats, localRead, remoteReadPtr, candidates, evidenceRange);
+    getReadBreakendsImpl(_opt, rstats, localRead, remoteReadPtr, candidates, evidenceRange, "NA", retrieveSemiAligned);
 }

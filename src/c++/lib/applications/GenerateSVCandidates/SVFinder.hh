@@ -72,6 +72,8 @@ private:
     SVLocusSet _set;
     SVLocusScanner _readScanner;
 
+    std::string _referenceFilename;
+
     typedef boost::shared_ptr<bam_streamer> streamPtr;
     std::vector<streamPtr> _bamStreams;
 };
