@@ -151,7 +151,7 @@ struct SVLocusScanner
         const unsigned defaultReadGroupIndex,
         std::vector<SVLocus>& loci,
         const std::string& bkptRef,
-        const bool retrieveSemiAligned) const;
+        const bool retrieveLocalEvidence) const;
 
     /// get local and remote breakends for each SV Candidate which can be extracted from a read pair
     ///
@@ -166,7 +166,7 @@ struct SVLocusScanner
         const bam_record* remoteReadPtr,
         const unsigned defaultReadGroupIndex,
         std::vector<SVCandidate>& candidates,
-        const bool retrieveSemiAligned) const;
+        const bool retrieveLocalEvidence) const;
 
 
     struct Range

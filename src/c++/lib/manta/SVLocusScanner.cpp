@@ -604,7 +604,7 @@ getReadBreakendsImpl(
     std::vector<SVCandidate>& candidates,
     known_pos_range2& localEvidenceRange,
     const std::string& bkptRef,
-    const bool retrieveSemiAligned)
+    const bool retrieveLocalEvidence)
 
 {
     /// TODO: can't handle these yet, but plan to soon:
@@ -623,15 +623,16 @@ getReadBreakendsImpl(
     log_os << logtag << " post-indels candidate_size: " << candidates.size() << "\n";
 #endif
 
-    // - process soft-clip in the localRead:
-    getSVCandidatesFromReadClip(opt, localRead, localAlign, candidates);
-
+if (retrieveLocalEvidence) {
+    	// - process soft-clip in the localRead:
+		getSVCandidatesFromReadClip(opt, localRead, localAlign, candidates);
 #ifdef DEBUG_SCANNER
     log_os << logtag << " post-clip candidate_size: " << candidates.size() << "\n";
 #endif
-
-    if (retrieveSemiAligned) {
     	getSVCandidatesFromSemiAligned(opt, localRead, localAlign, candidates, bkptRef);
+#ifdef DEBUG_SCANNER
+    log_os << logtag << " post-semialigned candidate_size: " << candidates.size() << "\n";
+#endif
     }
     // TODO: add SA tag processing
 
@@ -670,7 +671,7 @@ getSVLociImpl(
     const bam_record& bamRead,
     std::vector<SVLocus>& loci,
     const std::string& bkptRef,
-    const bool retrieveSemiAligned)
+    const bool retrieveLocalEvidence)
 {
     using namespace illumina::common;
 
@@ -678,7 +679,7 @@ getSVLociImpl(
     std::vector<SVCandidate> candidates;
     known_pos_range2 localEvidenceRange;
 
-    getReadBreakendsImpl(opt, rstats, bamRead, NULL, candidates, localEvidenceRange, bkptRef,retrieveSemiAligned);
+    getReadBreakendsImpl(opt, rstats, bamRead, NULL, candidates, localEvidenceRange, bkptRef,retrieveLocalEvidence);
 
 #ifdef DEBUG_SCANNER
     static const std::string logtag("getSVLociImpl");
@@ -929,12 +930,12 @@ getSVLoci(
     const unsigned defaultReadGroupIndex,
     std::vector<SVLocus>& loci,
     const std::string& bkptRef,
-    const bool retrieveSemiAligned) const
+    const bool retrieveLocalEvidence) const
 {
     loci.clear();
 
     const CachedReadGroupStats& rstats(_stats[defaultReadGroupIndex]);
-    getSVLociImpl(_opt, rstats, bamRead, loci, bkptRef, retrieveSemiAligned);
+    getSVLociImpl(_opt, rstats, bamRead, loci, bkptRef, retrieveLocalEvidence);
     cachedQname = bamRead.qname();
     cachedMapq  = bamRead.map_qual();
 }
@@ -948,11 +949,11 @@ getBreakendPair(
     const bam_record* remoteReadPtr,
     const unsigned defaultReadGroupIndex,
     std::vector<SVCandidate>& candidates,
-    const bool retrieveSemiAligned) const
+    const bool retrieveLocalEvidence) const
 {
     const CachedReadGroupStats& rstats(_stats[defaultReadGroupIndex]);
 
     // throw evidence range away in this case
     known_pos_range2 evidenceRange;
-    getReadBreakendsImpl(_opt, rstats, localRead, remoteReadPtr, candidates, evidenceRange, "NA", retrieveSemiAligned);
+    getReadBreakendsImpl(_opt, rstats, localRead, remoteReadPtr, candidates, evidenceRange, "NA", retrieveLocalEvidence);
 }
