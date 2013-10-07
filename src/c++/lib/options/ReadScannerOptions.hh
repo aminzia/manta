@@ -33,8 +33,8 @@ struct ReadScannerOptions
         minSoftClipLen(8),
         // These numbers are based on checking a few dozens reads
         // and might need some fine-tuning
-        minSemiAlignedScoreGraph(120.0),
-        minSemiAlignedScoreCandidates(80.0),
+        minSemiAlignedScoreGraph(60.0),
+        minSemiAlignedScoreCandidates(40.0),
         minSingletonMapqGraph(40),
         minSingletonMapqCandidates(20)
     {}
