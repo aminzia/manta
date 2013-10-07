@@ -254,6 +254,7 @@ getBreakendReads(
 #ifdef DEBUG_ASBL
         log_os << "bam " << bamIndex << " semi-aligned " << semiAlignedCnt << " shadow " << shadowCnt << "\n"; 
 #endif
+        std::cerr << "bam " << bamIndex << " semi-aligned " << semiAlignedCnt << " shadow " << shadowCnt << "\n";
     }
 }
 
