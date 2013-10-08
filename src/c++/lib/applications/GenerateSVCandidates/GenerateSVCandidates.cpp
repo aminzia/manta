@@ -265,6 +265,8 @@ runGSC(
             log_os << logtag << " starting analysis of edge: ";
             dumpEdgeInfo(edge,cset,log_os);
             startTime = clock();
+            // good old stackoverflow :-)
+            clock_t startTime = clock();
         }
 
         try
@@ -330,7 +332,6 @@ runGSC(
             dumpEdgeInfo(edge,cset,log_os);
             throw;
         }
-
         if (opt.isVerbose)
         {
             static const double clockFactor(1./static_cast<double>(CLOCKS_PER_SEC));

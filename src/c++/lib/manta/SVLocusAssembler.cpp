@@ -122,7 +122,9 @@ getBreakendReads(
 
         static const unsigned MAX_NUM_READS(1000);
         unsigned int shadowCnt(0);
+#ifdef DEBUG_ASBL
         unsigned int semiAlignedCnt(0);
+#endif 
 
         while (bamStream.next() && (reads.size() < MAX_NUM_READS))
         {
@@ -201,7 +203,9 @@ getBreakendReads(
                     if (isSemiAligned(bamRead,qry,ref,_scanOpt.minSemiAlignedScoreCandidates))
                     {
                         isSemiAlignedKeeper = true;
+#ifdef DEBUG_ASBL
                         ++semiAlignedCnt;
+#endif 
                     }
                 }
             }
@@ -254,7 +258,7 @@ getBreakendReads(
 #ifdef DEBUG_ASBL
         log_os << "bam " << bamIndex << " semi-aligned " << semiAlignedCnt << " shadow " << shadowCnt << "\n";
 #endif
-        std::cerr << "bam " << bamIndex << " semi-aligned " << semiAlignedCnt << " shadow " << shadowCnt << "\n";
+        //std::cerr << "bam " << bamIndex << " semi-aligned " << semiAlignedCnt << " shadow " << shadowCnt << "\n";
     }
 }
 

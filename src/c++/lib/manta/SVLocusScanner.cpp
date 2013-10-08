@@ -431,6 +431,12 @@ isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
     static const std::string logtag("isSemiAligned");
     log_os << logtag << " semi-aligned score=" << semiAlignedScore << " read qname=" << bamRead.qname() << " apath=" << apath <<  std::endl;
 #endif
+    /*std::cout << " semi-aligned score=" << semiAlignedScore << " read qname=" << bamRead.qname() << " apath=" << apath <<  std::endl;
+    if (semiAlignedScore>minSemiAlignedScore) {
+        std::cout << "SEMI-ALIGNED" << std::endl;
+    } else {
+        std::cout << "NOT SEMI-ALIGNED" << std::endl;
+    }*/
     return (semiAlignedScore>minSemiAlignedScore);
 }
 
@@ -798,7 +804,7 @@ if (retrieveLocalEvidence) {
 #ifdef DEBUG_SCANNER
     log_os << logtag << " post-semialigned candidate_size: " << candidates.size() << "\n";
 #endif
-    std::cerr << " post-semialigned candidate_size: " << candidates.size() << "\n";
+    //std::cerr << " post-semialigned candidate_size: " << candidates.size() << "\n";
     }
 
     /// - process split/SA reads:

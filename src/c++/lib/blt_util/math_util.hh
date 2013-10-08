@@ -32,6 +32,8 @@ FloatType
 log1p_switch(const FloatType x)
 {
 
+    //assert(x != (-1)); // otherwise log(0) below
+
     // better number??
     static const FloatType smallx_thresh(0.01);
 

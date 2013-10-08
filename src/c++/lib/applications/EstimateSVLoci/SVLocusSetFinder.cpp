@@ -201,7 +201,7 @@ update(const bam_record& bamRead,
     }
 
 #ifdef DEBUG_SFINDER
-    isLocalAssemblyEvidence = _readScanner.isLocalAssemblyEvidence(bamRead);
+    isLocalAssemblyEvidence = _readScanner.isLocalAssemblyEvidence(bamRead,bkptRef);
     log_os << "SFinder: Accepted read. isAnomalous "  << isAnomalous << " is Local assm evidence: " << isLocalAssemblyEvidence << " read: " << bamRead << "\n";
 #endif
 
