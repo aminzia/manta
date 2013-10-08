@@ -633,6 +633,7 @@ if (retrieveLocalEvidence) {
 #ifdef DEBUG_SCANNER
     log_os << logtag << " post-semialigned candidate_size: " << candidates.size() << "\n";
 #endif
+    std::cerr << " post-semialigned candidate_size: " << candidates.size() << "\n";
     }
     // TODO: add SA tag processing
 
