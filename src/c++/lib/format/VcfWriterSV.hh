@@ -22,8 +22,6 @@
 #include "manta/SVCandidateAssemblyData.hh"
 #include "manta/SVCandidateSetData.hh"
 #include "svgraph/SVLocusSet.hh"
-#include "manta/SomaticSVScoreInfo.hh"
-#include "options/SomaticCallOptions.hh"
 #include "boost/format.hpp"
 
 #include <iosfwd>
@@ -45,8 +43,11 @@ struct VcfWriterSV
         const char* progVersion)
     {
         writeHeaderPrefix(progName, progVersion);
-        writeHeaderSuffix();
+        writeHeaderColumnKey();
     }
+
+    typedef std::vector<std::string> InfoTag_t;
+    typedef std::vector<std::pair<std::string,std::vector<std::string> > > SampleTag_t;
 
 protected:
     void
@@ -55,7 +56,7 @@ protected:
         const char* progVersion);
 
     void
-    writeHeaderSuffix();
+    writeHeaderColumnKey();
 
     virtual
     void
@@ -63,7 +64,15 @@ protected:
 
     virtual
     void
+    addHeaderFormat() const {}
+
+    virtual
+    void
     addHeaderFilters() const {}
+
+    virtual
+    void
+    addHeaderFormatSampleKey() const {}
 
     void
     writeSVCore(
@@ -72,27 +81,45 @@ protected:
         const SVCandidateAssemblyData& adata,
         const SVCandidate& sv);
 
-    virtual
-    void
-    addSplitReadInfo(
-        std::vector<std::string>& /*infotags*/) const
-    {}
-
+    /// add info tags which can be customized by sub-class
     virtual
     void
     modifyInfo(
+        InfoTag_t& /*infotags*/) const
+    {}
+
+    /// add info tags specific to translocations:
+    virtual
+    void
+    modifyTranslocInfo(
         const bool /*isFirstOfPair*/,
-        const SVCandidateSetData& /*svData*/,
-        const SVCandidateAssemblyData& /*adata*/,
-        std::vector<std::string>& /*infotags*/) const
+        InfoTag_t& /*infotags*/) const
     {}
 
     virtual
-    std::string
-    getFilter() const
+    void
+    writeQual() const
     {
-        return ".";
+        _os << '.';
     }
+
+    virtual
+    void
+    writeFilter() const
+    {
+        _os << '.';
+    }
+
+    virtual
+    void
+    modifySample(
+        const SVCandidate& /*sv*/,
+        SampleTag_t& /*sampletags*/) const
+    {}
+
+    void
+    writeFilters(
+        const std::set<std::string>& filters) const;
 
 private:
 

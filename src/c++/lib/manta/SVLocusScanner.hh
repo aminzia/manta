@@ -13,6 +13,8 @@
 
 ///
 /// \author Chris Saunders
+/// \author Ole Schulz-Trieglaff
+/// \author Bret Barnes
 ///
 
 #pragma once
@@ -35,14 +37,14 @@
 struct SVObservationWeights
 {
     // input evidence:
-    static const unsigned readPair = 2;
+    static const unsigned readPair = 3;
     static const unsigned closeReadPair = 1;
-    static const unsigned internalReadEvent = 2; ///< indels, soft-clip, etc.
+    static const unsigned internalReadEvent = 3; ///< indels, soft-clip, etc.
 
     static const float closePairFactor; ///< fragments within this factor of the minimum size cutoff are treated as 'close' pairs and receive a modified evidence count
 
     // noise reduction:
-    static const unsigned observation = 2; ///< 'average' observation weight, this is used to scale noise filtration, but not for any evidence type
+    static const unsigned observation = 3; ///< 'average' observation weight, this is used to scale noise filtration, but not for any evidence type
 };
 
 
@@ -73,6 +75,20 @@ isGoodShadow(const bam_record& bamRead,
              const std::string& lastQname,
              const double minSingletonMapq);
 
+
+struct ReadScannerDerivOptions
+{
+    ReadScannerDerivOptions(const ReadScannerOptions& opt) :
+        beforeBreakend(opt.minPairBreakendSize/2),
+        afterBreakend(opt.minPairBreakendSize-beforeBreakend)
+    {}
+
+    const pos_t beforeBreakend;
+    const pos_t afterBreakend;
+};
+
+
+
 /// consolidate functions which process a read to determine its
 /// SV evidence value
 ///
@@ -93,6 +109,12 @@ struct SVLocusScanner
     /// Tests also for low mapq
     bool
     isReadFiltered(const bam_record& bamRead) const;
+
+    unsigned
+    getMinMapQ() const
+    {
+        return _opt.minMapq;
+    }
 
     /// custom version of proper pair bit test:
     bool
@@ -125,20 +147,6 @@ struct SVLocusScanner
         const bam_record& bamRead,
         const std::string& bkptRef) const;
 
-    /// a read is a shadow if it is unaligned but its partner aligns confidently
-    bool
-    isGoodShadow(
-        const bam_record& bamRead, const uint8_t lastMapq, const std::string& lastQname) const;
-
-    bool
-    isClipped(
-        const bam_record& bamRead) const;
-
-    unsigned
-    getClipLength(
-        const bam_record& bamRead) const;
-
-
     /// return zero to many SVLocus objects if the read supports any
     /// structural variant(s) (detectable by manta)
     ///
@@ -149,9 +157,11 @@ struct SVLocusScanner
     getSVLoci(
         const bam_record& bamRead,
         const unsigned defaultReadGroupIndex,
-        std::vector<SVLocus>& loci,
+        //std::vector<SVLocus>& loci,
         const std::string& bkptRef,
-        const bool retrieveLocalEvidence) const;
+        const bool retrieveLocalEvidence,
+        const std::map<std::string, int32_t>& chromToIndex,
+        std::vector<SVLocus>& loci) const;
 
     /// get local and remote breakends for each SV Candidate which can be extracted from a read pair
     ///
@@ -165,9 +175,19 @@ struct SVLocusScanner
         const bam_record& localRead,
         const bam_record* remoteReadPtr,
         const unsigned defaultReadGroupIndex,
-        std::vector<SVCandidate>& candidates,
-        const bool retrieveLocalEvidence) const;
+        const bool retrieveLocalEvidence,
+        const std::map<std::string, int32_t>& chromToIndex,
+        std::vector<SVCandidate>& candidates) const;
 
+    /// provide direct access to the frag distro for
+    /// functions which can't be cached
+    ///
+    const SizeDistribution&
+    getFragSizeDistro(
+        const unsigned defaultReadGroupIndex) const
+    {
+        return _rss.getStats(defaultReadGroupIndex).fragStats;
+    }
 
     struct Range
     {
@@ -179,6 +199,12 @@ struct SVLocusScanner
         double min;
         double max;
     };
+
+    const Range&
+    getEvidencePairRange(const unsigned readGroupIndex) const
+    {
+        return _stats[readGroupIndex].evidencePair;
+    }
 
     struct CachedReadGroupStats
     {
@@ -202,6 +228,7 @@ private:
     /////////////////////////////////////////////////
     // data:
     const ReadScannerOptions _opt;
+    const ReadScannerDerivOptions _dopt;
     ReadGroupStatsSet _rss;
 
     std::vector<CachedReadGroupStats> _stats;

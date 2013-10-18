@@ -15,36 +15,35 @@
 /// \author Chris Saunders
 ///
 
-#include "format/VcfWriterSomaticSV.hh"
-
-#include "boost/algorithm/string/join.hpp"
+#include "format/VcfWriterDiploidSV.hh"
 
 
 
 void
-VcfWriterSomaticSV::
+VcfWriterDiploidSV::
 addHeaderFormatSampleKey() const
 {
-    /// TODO: get sample name from bam header/user
-    _os << "FORMAT\tNORMAL\tTUMOR";
+    // TODO: extract sample name from input bam header / user
+    _os << "\tFORMAT\tSAMPLE";
 }
 
 
 
 void
-VcfWriterSomaticSV::
+VcfWriterDiploidSV::
 addHeaderInfo() const
 {
-    _os << "##INFO=<ID=SOMATIC,Number=0,Type=Flag,Description=\"Somatic mutation\">\n";
-    _os << "##INFO=<ID=SOMATICSCORE,Number=1,Type=Integer,Description=\"Somatic variant Quality score\">\n";
+//    _os << "##INFO=<ID=SOMATIC,Number=0,Type=Flag,Description=\"Somatic mutation\">\n";
 }
 
 
 
 void
-VcfWriterSomaticSV::
+VcfWriterDiploidSV::
 addHeaderFormat() const
 {
+    _os << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n";
+    _os << "##FORMAT=<ID=GQ,Number=1,Type=Float,Description=\"Genotype Quality\">\n";
     _os << "##FORMAT=<ID=PR,Number=.,Type=Integer,Description=\"Spanning paired-read support for the ref and alt alleles in the order listed\">\n";
     _os << "##FORMAT=<ID=SR,Number=.,Type=Integer,Description=\"Split reads for the ref and alt alleles in the order listed, for reads where P(allele|read)>0.999\">\n";
 }
@@ -52,84 +51,69 @@ addHeaderFormat() const
 
 
 void
-VcfWriterSomaticSV::
+VcfWriterDiploidSV::
 addHeaderFilters() const
 {
     if (_isMaxDepthFilter)
     {
-        _os << "##FILTER=<ID=" << _somaticOpt.maxDepthFilterLabel << ",Description=\"Normal sample site depth is greater than " << _somaticOpt.maxDepthFactor << "x the mean chromosome depth near one or both variant breakends\">\n";
+        _os << "##FILTER=<ID=" << _diploidOpt.maxDepthFilterLabel << ",Description=\"Sample site depth is greater than " << _diploidOpt.maxDepthFactor << "x the mean chromosome depth near one or both variant breakends\">\n";
     }
+    _os << "##FILTER=<ID=" << _diploidOpt.minGTFilterLabel << ",Description=\"GQ score is less than " << _diploidOpt.minGTScoreFilter << "\">\n";
 }
 
 
 
+#if 0
 void
-VcfWriterSomaticSV::
+VcfWriterDiploidSV::
 modifyInfo(
-    std::vector<std::string>& infotags) const
+    InfoTag_t& infotags) const
 {
     assert(_modelScorePtr != NULL);
     const SVModelScoreInfo& modelScoreInfo(*_modelScorePtr);
 
-    infotags.push_back("SOMATIC");
-    infotags.push_back( str(boost::format("SOMATICSCORE=%i") % modelScoreInfo.somatic.somaticScore) );
+//    infotags.push_back("SOMATIC");
+//    infotags.push_back( str(boost::format("SOMATICSCORE=%i") % modelScoreInfo.somatic.somaticScore) );
 }
+#endif
 
 
 
 void
-VcfWriterSomaticSV::
+VcfWriterDiploidSV::
 modifyTranslocInfo(
     const bool isFirstOfPair,
-    std::vector<std::string>& infotags) const
+    InfoTag_t& infotags) const
 {
     assert(_modelScorePtr != NULL);
     const SVScoreInfo& baseInfo(_modelScorePtr->base);
 
 #if 0
-    infotags.push_back( str(boost::format("NORMAL_ALT_BND_PAIR_COUNT=%i") %
+    infotags.push_back( str(boost::format("ALT_BND_PAIR_COUNT=%i") %
                             (isFirstOfPair ? baseInfo.normal.alt.bp1SpanReadCount : baseInfo.normal.alt.bp2SpanReadCount) ) );
-    infotags.push_back( str(boost::format("TUMOR_ALT_BND_PAIR_COUNT=%i") %
-                            (isFirstOfPair ? baseInfo.tumor.alt.bp1SpanReadCount : baseInfo.tumor.alt.bp2SpanReadCount) ) );
 #endif
     infotags.push_back( str(boost::format("BND_DEPTH=%i") %
                             (isFirstOfPair ? baseInfo.bp1MaxDepth : baseInfo.bp2MaxDepth) ) );
     infotags.push_back( str(boost::format("MATE_BND_DEPTH=%i") %
                             (isFirstOfPair ? baseInfo.bp2MaxDepth : baseInfo.bp1MaxDepth) ) );
-
 }
 
 
 
 void
-VcfWriterSomaticSV::
-modifySample(
-    const SVCandidate& sv,
-    SampleTag_t& sampletags) const
+VcfWriterDiploidSV::
+writeQual() const
 {
     assert(_modelScorePtr != NULL);
-    const SVModelScoreInfo& modelScoreInfo(*_modelScorePtr);
-    const SVScoreInfo& baseInfo(modelScoreInfo.base);
+    const SVScoreInfoDiploid& diploidInfo(_modelScorePtr->diploid);
 
-    std::vector<std::string> values(2);
-
-    static const std::string pairTag("PR");
-    values[0] = str( boost::format("%i,%i") % baseInfo.normal.ref.spanPairCount % baseInfo.normal.alt.spanPairCount);
-    values[1] = str( boost::format("%i,%i") % baseInfo.tumor.ref.spanPairCount % baseInfo.tumor.alt.spanPairCount);
-    sampletags.push_back(std::make_pair(pairTag,values));
-
-    if (sv.isImprecise()) return;
-
-    static const std::string srTag("SR");
-    values[0] = str( boost::format("%i,%i") % baseInfo.normal.ref.confidentSplitReadCount % baseInfo.normal.alt.confidentSplitReadCount);
-    values[1] = str( boost::format("%i,%i") % baseInfo.tumor.ref.confidentSplitReadCount % baseInfo.tumor.alt.confidentSplitReadCount);
-    sampletags.push_back(std::make_pair(srTag,values));
+    _os << diploidInfo.altScore;
 }
 
 
 
 void
-VcfWriterSomaticSV::
+VcfWriterDiploidSV::
 writeFilter() const
 {
     assert(_modelScorePtr != NULL);
@@ -140,8 +124,62 @@ writeFilter() const
 
 
 
+static
+const char*
+gtLabel(
+    const DIPLOID_GT::index_t id)
+{
+    using namespace DIPLOID_GT;
+    switch (id)
+    {
+    case REF :
+        return "0/0";
+    case HET :
+        return "0/1";
+    case HOM :
+        return "1/1";
+    default :
+        return "";
+    }
+}
+
+
+
 void
-VcfWriterSomaticSV::
+VcfWriterDiploidSV::
+modifySample(
+    const SVCandidate& sv,
+    SampleTag_t& sampletags) const
+{
+    assert(_modelScorePtr != NULL);
+    const SVModelScoreInfo& modelScoreInfo(*_modelScorePtr);
+    const SVScoreInfo& baseInfo(modelScoreInfo.base);
+
+    std::vector<std::string> values(1);
+
+    static const std::string gtTag("GT");
+    values[0] = gtLabel(modelScoreInfo.diploid.gt);
+    sampletags.push_back(std::make_pair(gtTag,values));
+
+    static const std::string gqTag("GQ");
+    values[0] = str( boost::format("%s") % modelScoreInfo.diploid.gtScore);
+    sampletags.push_back(std::make_pair(gqTag,values));
+
+    static const std::string pairTag("PR");
+    values[0] = str( boost::format("%i,%i") % baseInfo.normal.ref.spanPairCount % baseInfo.normal.alt.spanPairCount);
+    sampletags.push_back(std::make_pair(pairTag,values));
+
+    if (sv.isImprecise()) return;
+
+    static const std::string srTag("SR");
+    values[0] = str( boost::format("%i,%i") % baseInfo.normal.ref.confidentSplitReadCount % baseInfo.normal.alt.confidentSplitReadCount);
+    sampletags.push_back(std::make_pair(srTag,values));
+}
+
+
+
+void
+VcfWriterDiploidSV::
 writeSV(
     const EdgeInfo& edge,
     const SVCandidateSetData& svData,

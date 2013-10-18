@@ -16,10 +16,12 @@
 ///
 
 #include "SVScorer.hh"
+#include "SVScorerShared.hh"
 
 #include "blt_util/align_path_bam_util.hh"
 #include "blt_util/bam_streamer.hh"
-#include "blt_util/log.hh"
+#include "blt_util/prob_util.hh"
+#include "blt_util/qscore.hh"
 #include "common/Exceptions.hh"
 #include "manta/ReadGroupStatsSet.hh"
 #include "boost/foreach.hpp"
@@ -28,7 +30,22 @@
 #include <iostream>
 #include <string>
 
-//#define DEBUG_SVS
+#define DEBUG_SVS
+
+#ifdef DEBUG_SVS
+#include "blt_util/log.hh"
+#endif
+
+
+//#define DEBUG_SCORE
+
+#ifdef DEBUG_SCORE
+#include "blt_util/log.hh"
+#endif
+
+
+const pos_t PairOptions::minFragSupport(50);
+
 
 
 SVScorer::
@@ -36,8 +53,11 @@ SVScorer(
     const GSCOptions& opt,
     const bam_header_info& header) :
     _isAlignmentTumor(opt.alignFileOpt.isAlignmentTumor),
+    _diploidOpt(opt.diploidOpt),
+    _diploidDopt(_diploidOpt),
     _somaticOpt(opt.somaticOpt),
-    _dFilter(opt.chromDepthFilename, opt.somaticOpt.maxDepthFactor, header),
+    _dFilterDiploid(opt.chromDepthFilename, _diploidOpt.maxDepthFactor, header),
+    _dFilterSomatic(opt.chromDepthFilename, _somaticOpt.maxDepthFactor, header),
     _readScanner(opt.scanOpt,opt.statsFilename,opt.alignFileOpt.alignmentFilename)
 {
     // setup regionless bam_streams:
@@ -52,6 +72,10 @@ SVScorer(
 
 
 
+/// add bam alignment to simple short-range vector depth estimate
+///
+/// \param[in] beginPos this is the begin position of the range covered by the depth array
+///
 static
 void
 addReadToDepthEst(
@@ -91,7 +115,8 @@ addReadToDepthEst(
 
 unsigned
 SVScorer::
-getBreakendMaxMappedDepth(const SVBreakend& bp)
+getBreakendMaxMappedDepth(
+    const SVBreakend& bp)
 {
     /// define a new interval -/+ 50 bases around the center pos
     /// of the breakpoint
@@ -136,13 +161,66 @@ getBreakendMaxMappedDepth(const SVBreakend& bp)
 }
 
 
+
+static
 void
-SVScorer::
+incrementAlleleEvidence(
+    const SplitReadAlignment& bp1SR,
+    const SplitReadAlignment& bp2SR,
+    const unsigned readMapQ,
+    SVSampleAlleleInfo& allele,
+    SVFragmentEvidenceAlleleBreakendPerRead& bp1Support,
+    SVFragmentEvidenceAlleleBreakendPerRead& bp2Support)
+{
+    float bp1Evidence(0);
+    float bp2Evidence(0);
+    if (bp1SR.has_evidence())
+    {
+        bp1Evidence = bp1SR.get_evidence();
+        bp1Support.isSplitSupport = true;
+        bp1Support.splitEvidence = bp1Evidence;
+    }
+
+    bp1Support.splitLnLhood = bp1SR.get_alignment().get_alignLnLhood();
+
+    if (bp2SR.has_evidence())
+    {
+        bp2Evidence = bp2SR.get_evidence();
+        bp2Support.isSplitSupport = true;
+        bp2Support.splitEvidence = bp2Evidence;
+    }
+
+    bp2Support.splitLnLhood = bp2SR.get_alignment().get_alignLnLhood();
+
+    const float evidence(std::max(bp1Evidence, bp2Evidence));
+
+    if ((bp1SR.has_evidence()) || (bp2SR.has_evidence()))
+    {
+        allele.splitReadCount++;
+        allele.splitReadEvidence += evidence;
+        allele.splitReadMapQ += readMapQ * readMapQ;
+
+#ifdef DEBUG_SVS
+        log_os << "bp1\n";
+        log_os << bp1SR;
+        log_os << "bp2\n";
+        log_os << bp2SR;
+        log_os << "evidence = " << evidence << "\n";
+        log_os << "accumulated evidence = " << allele.splitReadEvidence << "\n";
+        log_os << "contigCount = " << allele.splitReadCount << "\n\n";
+#endif
+    }
+}
+
+
+
+static
+void
 scoreSplitReads(
-    bool isBp1,
     const SVBreakend& bp,
     const SVAlignmentInfo& svAlignInfo,
-    read_map_t& readMap,
+    const unsigned minMapQ,
+    SVEvidence::evidenceTrack_t& sampleEvidence,
     bam_streamer& readStream,
     SVSampleInfo& sample)
 {
@@ -151,261 +229,599 @@ scoreSplitReads(
     while (readStream.next())
     {
         const bam_record& bamRead(*(readStream.get_record_ptr()));
+
+        if (bamRead.is_filter()) continue;
+        if (bamRead.is_dup()) continue;
+        if (bamRead.is_secondary()) continue;
+        if (bamRead.is_supplement()) continue;
+
         const std::string readSeq = bamRead.get_bam_read().get_string();
-        const std::string readSeqRC = bamRead.get_bam_read().get_rc_string();
+        const uint8_t* qual(bamRead.qual());
         const unsigned readMapQ = bamRead.map_qual();
 
-        // TODO: the logic of R1 & R2 should change for alignments with split-reads (e.g. BWA-MEME)
-        std::string readId(bamRead.qname());
-        if (bamRead.is_first())
-            readId += "_R1";
-        else if (bamRead.is_second())
-            readId += "_R2";
+        SVFragmentEvidence& fragment(sampleEvidence[bamRead.qname()]);
 
-        // map all reads for bp1
-        // then for bp2, skip reads that have been considered for bp1 to avoid double-counting
-        if (isBp1)
-        {
-            readMap[readId] = true;
-        }
-        else if (readMap.find(readId) != readMap.end())
-        {
-            continue;
-        }
+        setReadEvidence(minMapQ, bamRead, fragment.getRead(bamRead.is_first()));
+
+        SVFragmentEvidenceAlleleBreakendPerRead& altBp1ReadSupport(fragment.alt.bp1.getRead(bamRead.is_first()));
+        SVFragmentEvidenceAlleleBreakendPerRead& refBp1ReadSupport(fragment.ref.bp1.getRead(bamRead.is_first()));
+        SVFragmentEvidenceAlleleBreakendPerRead& altBp2ReadSupport(fragment.alt.bp2.getRead(bamRead.is_first()));
+        SVFragmentEvidenceAlleleBreakendPerRead& refBp2ReadSupport(fragment.ref.bp2.getRead(bamRead.is_first()));
+
+        /// in this function we evaluate the hypothesis of both breakends at the same time, the only difference bp1 vs
+        /// bp2 makes is where in the bam we look for reads, therefore if we see split evaluation for bp1 or bp2, we can skip this read:
+        if (altBp1ReadSupport.isSplitEvaluated) continue;
+
+        altBp1ReadSupport.isSplitEvaluated = true;
+        refBp1ReadSupport.isSplitEvaluated = true;
+        altBp2ReadSupport.isSplitEvaluated = true;
+        refBp2ReadSupport.isSplitEvaluated = true;
 
         // align the read to the somatic contig
-        splitReadAlignment bp1ContigSR;
-        if (svAlignInfo.bp1ContigReversed)
-            bp1ContigSR.align(readSeqRC, svAlignInfo.contigSeq, svAlignInfo.bp1ContigOffset);
-        else
-            bp1ContigSR.align(readSeq, svAlignInfo.contigSeq, svAlignInfo.bp1ContigOffset);
-        splitReadAlignment bp2ContigSR;
-        if (svAlignInfo.bp2ContigReversed)
-            bp2ContigSR.align(readSeqRC, svAlignInfo.contigSeq, svAlignInfo.bp2ContigOffset);
-        else
-            bp2ContigSR.align(readSeq, svAlignInfo.contigSeq, svAlignInfo.bp2ContigOffset);
+        SplitReadAlignment bp1ContigSR;
+        bp1ContigSR.align(readSeq, qual, svAlignInfo.bp1ContigSeq(), svAlignInfo.bp1ContigOffset);
+        SplitReadAlignment bp2ContigSR;
+        bp2ContigSR.align(readSeq, qual, svAlignInfo.bp2ContigSeq(), svAlignInfo.bp2ContigOffset);
 
         // align the read to reference regions
-        splitReadAlignment bp1RefSR;
-        bp1RefSR.align(readSeq, svAlignInfo.bp1RefSeq, svAlignInfo.bp1RefOffset);
-        splitReadAlignment bp2RefSR;
-        bp2RefSR.align(readSeq, svAlignInfo.bp2RefSeq, svAlignInfo.bp2RefOffset);
+        SplitReadAlignment bp1RefSR;
+        bp1RefSR.align(readSeq, qual, svAlignInfo.bp1RefSeq, svAlignInfo.bp1RefOffset);
+        SplitReadAlignment bp2RefSR;
+        bp2RefSR.align(readSeq, qual, svAlignInfo.bp2RefSeq, svAlignInfo.bp2RefOffset);
 
         // scoring
-        float bp1ContigEvidence(0);
-        float bp2ContigEvidence(0);
-        float bp1RefEvidence(0);
-        float bp2RefEvidence(0);
-        if (bp1ContigSR.has_evidence()) bp1ContigEvidence = bp1ContigSR.get_evidence();
-        if (bp2ContigSR.has_evidence()) bp2ContigEvidence = bp2ContigSR.get_evidence();
-        if (bp1RefSR.has_evidence()) bp1RefEvidence = bp1RefSR.get_evidence();
-        if (bp2RefSR.has_evidence()) bp2RefEvidence = bp2RefSR.get_evidence();
+        incrementAlleleEvidence(bp1ContigSR, bp2ContigSR, readMapQ, sample.alt, altBp1ReadSupport, altBp2ReadSupport);
+        incrementAlleleEvidence(bp1RefSR, bp2RefSR, readMapQ, sample.ref, refBp1ReadSupport, refBp2ReadSupport);
+    }
+}
 
-        const float contigEvidence = std::max(bp1ContigEvidence, bp2ContigEvidence);
-        const float refEvidence = std::max(bp1RefEvidence, bp2RefEvidence);
 
-        if ((bp1ContigSR.has_evidence()) || (bp2ContigSR.has_evidence()))
-        {
-            sample.contigSRCount++;
-            sample.contigSREvidence += contigEvidence;
-            sample.contigSRMapQ += readMapQ * readMapQ;
+
+/// return rms given sum of squares
+static
+float
+finishRms(
+    const float sumSqr,
+    const unsigned count)
+{
+    if (count == 0) return 0.;
+    return std::sqrt(sumSqr / static_cast<float>(count));
+}
+
+
+
+static
+void
+finishRms(
+    SVSampleAlleleInfo& sai)
+{
+    sai.splitReadMapQ = finishRms(sai.splitReadMapQ, sai.splitReadCount);
+}
+
+
+
+/// make final split read computations after bam scanning is finished:
+static
+void
+finishSampleSRData(
+    SVSampleInfo& sample)
+{
+    // finish rms mapq:
+    finishRms(sample.alt);
+    finishRms(sample.ref);
+}
+
+
+
+void
+SVScorer::
+getSVSplitReadSupport(
+    const SVCandidateAssemblyData& assemblyData,
+    const SVCandidate& sv,
+    SVScoreInfo& baseInfo,
+    SVEvidence& evidence)
+{
+    static const unsigned maxDepthSRFactor(2); ///< at what multiple of the maxDepth do we skip split read analysis?
+
+    bool isSkipSRSearchDepth(false);
+
+    if (_dFilterDiploid.isMaxDepthFilter() && _dFilterSomatic.isMaxDepthFilter())
+    {
+        const double bp1MaxMaxDepth(std::max(_dFilterDiploid.maxDepth(sv.bp1.interval.tid), _dFilterSomatic.maxDepth(sv.bp1.interval.tid)));
+        const double bp2MaxMaxDepth(std::max(_dFilterDiploid.maxDepth(sv.bp2.interval.tid), _dFilterSomatic.maxDepth(sv.bp2.interval.tid)));
+
+        isSkipSRSearchDepth=((baseInfo.bp1MaxDepth > (maxDepthSRFactor*bp1MaxMaxDepth)) ||
+                             (baseInfo.bp2MaxDepth > (maxDepthSRFactor*bp2MaxMaxDepth)));
+    }
+
+    // apply the split-read scoring, only when:
+    // 1) the SV is precise, i.e. has successful somatic contigs;
+    // 2) the values of max depth are reasonable (otherwise, the read map may blow out).
+    //
+    // consider 2-locus events first
+    // TODO: to add local assembly later
+    //
+    const bool isSkipSRSearch(
+        (! assemblyData.isSpanning) ||
+        (sv.isImprecise()) ||
+        (isSkipSRSearchDepth));
+
+    if (isSkipSRSearch) return;
+
+    // Get Data on standard read pairs crossing the two breakends,
+
+    // extract SV alignment info for split read evidence
+    const SVAlignmentInfo SVAlignInfo(sv, assemblyData);
+#ifdef DEBUG_SVS
+    log_os << SVAlignInfo << "\n";
+#endif
+
+    const unsigned minMapQ(_readScanner.getMinMapQ());
+
+    const unsigned bamCount(_bamStreams.size());
+    for (unsigned bamIndex(0); bamIndex < bamCount; ++bamIndex)
+    {
+        const bool isTumor(_isAlignmentTumor[bamIndex]);
+        SVSampleInfo& sample(isTumor ? baseInfo.tumor : baseInfo.normal);
+        bam_streamer& bamStream(*_bamStreams[bamIndex]);
+
+        SVEvidence::evidenceTrack_t& sampleEvidence(evidence.getSample(isTumor));
+        // scoring split reads overlapping bp1
+        scoreSplitReads(sv.bp1, SVAlignInfo, minMapQ, sampleEvidence,
+                        bamStream, sample);
+        // scoring split reads overlapping bp2
+        scoreSplitReads(sv.bp2, SVAlignInfo, minMapQ, sampleEvidence,
+                        bamStream, sample);
+    }
+
+    finishSampleSRData(baseInfo.tumor);
+    finishSampleSRData(baseInfo.normal);
 
 #ifdef DEBUG_SVS
-            /*
-            log_os << "bp1Contig \n";
-            log_os << bp1ContigSR;
-            log_os << "bp2Contig \n";
-            log_os << bp2ContigSR;
-            log_os << "contigEvidence = " << contigEvidence << "\n";
-            log_os << "accumulated contigEvidence = " << sample.contigSREvidence << "\n";
-            log_os << "contigCount = " << sample.contigSRCount << "\n\n";
-            */
+    log_os << "tumor contig SP count: " << baseInfo.tumor.alt.splitReadCount << "\n";
+    log_os << "tumor contig SP evidence: " << baseInfo.tumor.alt.splitReadEvidence << "\n";
+    log_os << "tumor contig SP_mapQ: " << baseInfo.tumor.alt.splitReadMapQ << "\n";
+    log_os << "normal contig SP count: " << baseInfo.normal.alt.splitReadCount << "\n";
+    log_os << "normal contig SP evidence: " << baseInfo.normal.alt.splitReadEvidence << "\n";
+    log_os << "normal contig SP_mapQ: " << baseInfo.normal.alt.splitReadMapQ << "\n";
+
+    log_os << "tumor ref SP count: " << baseInfo.tumor.ref.splitReadCount << "\n";
+    log_os << "tumor ref SP evidence: " << baseInfo.tumor.ref.splitReadEvidence << "\n";
+    log_os << "tumor ref SP_mapQ: " << baseInfo.tumor.ref.splitReadMapQ << "\n";
+    log_os << "normal ref SP count: " << baseInfo.normal.ref.splitReadCount << "\n";
+    log_os << "normal ref SP evidence: " << baseInfo.normal.ref.splitReadEvidence << "\n";
+    log_os << "normal ref SP_mapQ: " << baseInfo.normal.ref.splitReadMapQ << "\n";
 #endif
+}
+
+
+
+static
+bool
+isAlleleReadSupport(
+    const SVFragmentEvidenceAllele& allele,
+    const bool isRead1)
+{
+    return (allele.bp1.getRead(isRead1).isSplitSupport ||
+            allele.bp2.getRead(isRead1).isSplitSupport);
+}
+
+
+
+static
+bool
+isAnyReadSupport(
+    const SVFragmentEvidence& fragev,
+    const bool isRead1)
+{
+    return (isAlleleReadSupport(fragev.alt, isRead1) ||
+            isAlleleReadSupport(fragev.ref, isRead1));
+}
+
+
+
+static
+void
+lnToProb(
+    float& lower,
+    float& higher)
+{
+    lower = std::exp(lower-higher);
+    higher = 1./(lower+1.);
+    lower  = lower/(lower+1.);
+}
+
+
+
+static
+void
+addReadSupport(
+    const SVFragmentEvidence& fragev,
+    const bool isRead1,
+    SVSampleInfo& sampleBaseInfo)
+{
+    static const float supportProb(0.9999);
+
+    // only consider reads where at least one allele and one breakend is confident
+    //
+    // ...note this is done in the absence of having a noise state in the model
+    //
+    if (! isAnyReadSupport(fragev,isRead1)) return;
+
+    float altLhood =
+        std::max(fragev.alt.bp1.getRead(isRead1).splitLnLhood,
+                 fragev.alt.bp2.getRead(isRead1).splitLnLhood);
+
+    float refLhood =
+        std::max(fragev.ref.bp1.getRead(isRead1).splitLnLhood,
+                 fragev.ref.bp2.getRead(isRead1).splitLnLhood);
+
+    // convert to normalized prob:
+    if (altLhood > refLhood)
+    {
+        lnToProb(refLhood, altLhood);
+        if (altLhood>supportProb) sampleBaseInfo.alt.confidentSplitReadCount++;
+    }
+    else
+    {
+        lnToProb(altLhood, refLhood);
+        if (refLhood>supportProb) sampleBaseInfo.ref.confidentSplitReadCount++;
+    }
+
+
+}
+
+
+
+static
+void
+getSampleCounts(
+    const SVEvidence::evidenceTrack_t& sampleEvidence,
+    SVSampleInfo& sampleBaseInfo)
+{
+    BOOST_FOREACH(const SVEvidence::evidenceTrack_t::value_type& val, sampleEvidence)
+    {
+
+        const SVFragmentEvidence& fragev(val.second);
+
+        // evaluate read1 and read2 from this fragment
+        //
+        addReadSupport(fragev,true,sampleBaseInfo);
+        addReadSupport(fragev,false,sampleBaseInfo);
+    }
+}
+
+
+
+static
+void
+getSVSupportSummary(
+    const SVEvidence& evidence,
+    SVScoreInfo& baseInfo)
+{
+    /// get conservative count of reads which support only one allele, ie. P ( allele | read ) is high
+    ///
+    getSampleCounts(evidence.normal, baseInfo.normal);
+    getSampleCounts(evidence.tumor, baseInfo.tumor);
+}
+
+
+
+/// shared information gathering steps of all scoring models
+void
+SVScorer::
+scoreSV(
+    const SVCandidateSetData& svData,
+    const SVCandidateAssemblyData& assemblyData,
+    const SVCandidate& sv,
+    SVScoreInfo& baseInfo,
+    SVEvidence& evidence)
+{
+    // get breakend center_pos depth estimate:
+    baseInfo.bp1MaxDepth=(getBreakendMaxMappedDepth(sv.bp1));
+    baseInfo.bp2MaxDepth=(getBreakendMaxMappedDepth(sv.bp2));
+
+    /// global evidence accumulator for this SV:
+    // count the paired-read fragments supporting the ref and alt alleles in each sample:
+    //
+    getSVPairSupport(svData, sv, baseInfo, evidence);
+
+    // count the split reads supporting the ref and alt alleles in each sample
+    //
+    getSVSplitReadSupport(assemblyData, sv, baseInfo, evidence);
+
+    // compute allele likelihoods, and any other summary metric shared between all models:
+    //
+    getSVSupportSummary(evidence, baseInfo);
+}
+
+
+
+static
+void
+incrementAlleleLhood(
+    const float chimeraRate,
+    const float chimeraComp,
+    const SVFragmentEvidenceAllele& allele,
+    float& bpLhood)
+{
+    float fragProb(0);
+    if (allele.bp1.isFragmentSupport)
+    {
+        fragProb = allele.bp1.fragLengthProb;
+    }
+
+    if (allele.bp2.isFragmentSupport)
+    {
+        fragProb = std::max(fragProb, allele.bp2.fragLengthProb);
+    }
+
+    bpLhood *= (chimeraComp*fragProb + chimeraRate);
+}
+
+
+
+static
+bool
+isAnyPairSupport(
+    const SVFragmentEvidence& fragev)
+{
+    const bool isRefSupport(fragev.ref.bp1.isFragmentSupport || fragev.ref.bp2.isFragmentSupport);
+    const bool isAltSupport(fragev.alt.bp1.isFragmentSupport || fragev.alt.bp2.isFragmentSupport);
+
+    return (isRefSupport || isAltSupport);
+}
+
+
+
+/// score diploid germline specific components:
+static
+void
+scoreDiploidSV(
+    const CallOptionsDiploid& diploidOpt,
+    const CallOptionsDiploidDeriv& diploidDopt,
+    const SVCandidate& sv,
+    const ChromDepthFilterUtil& dFilter,
+    const SVEvidence& evidence,
+    SVScoreInfo& baseInfo,
+    SVScoreInfoDiploid& diploidInfo)
+{
+#ifdef DEBUG_SCORE
+    static const std::string logtag("scoreDiploidSV: ");
+#endif
+
+    /// TODO: set this from graph data:
+    ///
+    /// put some more thought into this -- is this P (spurious | any old read) or P( spurious | chimera ) ??
+    /// it seems like it should be the later in the usages that really matter.
+    ///
+    static const float chimeraRate(1e-3);
+    static const float chimeraComp(1.-chimeraRate);
+
+    //
+    // compute qualities
+    //
+    {
+        float loglhood[DIPLOID_GT::SIZE];
+        for (unsigned gt(0); gt<DIPLOID_GT::SIZE; ++gt)
+        {
+            loglhood[gt] = 0.;
         }
-        if ((bp1RefSR.has_evidence()) || (bp2RefSR.has_evidence()))
-        {
-            sample.refSRCount++;
-            sample.refSREvidence += refEvidence;
-            sample.refSRMapQ += readMapQ * readMapQ;
 
-#ifdef DEBUG_SVS
-            /*
-            log_os << "bp1Ref \n";
-            log_os << bp1RefSR;
-            log_os << "bp2Ref \n";
-            log_os << bp2RefSR;
-            log_os << "refEvidence = " << refEvidence << "\n";
-            log_os << "accumulated refEvidence = " << sample.refSREvidence << "\n";
-            log_os << "refCount = " << sample.refSRCount << "\n\n";
-            */
+        BOOST_FOREACH(const SVEvidence::evidenceTrack_t::value_type& val, evidence.normal)
+        {
+            const SVFragmentEvidence& fragev(val.second);
+
+            float fragRefLhood(1);
+            float fragAltLhood(1);
+
+#ifdef DEBUG_SCORE
+            log_os << logtag << "qname: " << val.first << " fragev: " << fragev << "\n";
 #endif
+
+            /// high-quality spanning support relies on read1 and read2 mapping well:
+            if ( fragev.read1.isObservedAnchor() && fragev.read2.isObservedAnchor())
+            {
+                /// only add to the likelihood if the fragment "supports" at least one allele:
+                if ( isAnyPairSupport(fragev) )
+                {
+                    incrementAlleleLhood(chimeraRate, chimeraComp, fragev.alt, fragAltLhood);
+                    incrementAlleleLhood(chimeraRate, chimeraComp, fragev.ref, fragRefLhood);
+                }
+            }
+
+//            float read1RefLhood(1);
+//            float read1AltLhood(1);
+
+            for (unsigned gt(0); gt<DIPLOID_GT::SIZE; ++gt)
+            {
+                const float altFrac(DIPLOID_GT::altFraction(gt));
+                const float reflhood(fragRefLhood * (1.-altFrac));
+                const float altlhood(fragAltLhood * altFrac);
+                loglhood[gt] += std::log(reflhood + altlhood);
+
+#ifdef DEBUG_SCORE
+                log_os << logtag << "gt/fragref/ref/fragalt/alt: "
+                       << DIPLOID_GT::label(gt)
+                       << " " << fragRefLhood
+                       << " " << reflhood
+                       << " " << fragAltLhood
+                       << " " << altlhood
+                       << "\n";
+#endif
+            }
+        }
+
+        float pprob[DIPLOID_GT::SIZE];
+        for (unsigned gt(0); gt<DIPLOID_GT::SIZE; ++gt)
+        {
+            pprob[gt] = loglhood[gt] + diploidDopt.prior[gt];
+        }
+
+        unsigned maxGt(0);
+        normalize_ln_distro(pprob, pprob+DIPLOID_GT::SIZE, maxGt);
+
+#ifdef DEBUG_SCORE
+        for (unsigned gt(0); gt<DIPLOID_GT::SIZE; ++gt)
+        {
+            log_os << logtag << "gt/lhood/prior/pprob: "
+                   << DIPLOID_GT::label(gt)
+                   << " " << loglhood[gt]
+                   << " " << diploidDopt.prior[gt]
+                   << " " << pprob[gt]
+                   << "\n";
+        }
+#endif
+
+        diploidInfo.gt=static_cast<DIPLOID_GT::index_t>(maxGt);
+        diploidInfo.altScore=error_prob_to_qphred(pprob[DIPLOID_GT::REF]);
+        diploidInfo.gtScore=error_prob_to_qphred(prob_comp(pprob,pprob+DIPLOID_GT::SIZE, diploidInfo.gt));
+    }
+
+
+    //
+    // apply filters
+    //
+    if (diploidInfo.altScore >= diploidOpt.minOutputAltScore)
+    {
+        if (dFilter.isMaxDepthFilter())
+        {
+            // apply maxdepth filter if either of the breakpoints exceeds the maximum depth:
+            if (baseInfo.bp1MaxDepth > dFilter.maxDepth(sv.bp1.interval.tid))
+            {
+                baseInfo.filters.insert(diploidOpt.maxDepthFilterLabel);
+            }
+            else if (baseInfo.bp2MaxDepth > dFilter.maxDepth(sv.bp2.interval.tid))
+            {
+                baseInfo.filters.insert(diploidOpt.maxDepthFilterLabel);
+            }
+        }
+
+        if ( diploidInfo.gtScore < diploidOpt.minGTScoreFilter)
+        {
+            baseInfo.filters.insert(diploidOpt.minGTFilterLabel);
         }
     }
 }
 
 
+
+/// score somatic specific components:
+static
+void
+scoreSomaticSV(
+    const CallOptionsSomatic& somaticOpt,
+    const SVCandidate& sv,
+    const ChromDepthFilterUtil& dFilter,
+    SVScoreInfo& baseInfo,
+    SVScoreInfoSomatic& somaticInfo)
+{
+    //
+    // compute qualities
+    //
+    {
+        bool isNonzeroSomaticQuality(true);
+
+        /// first check for substantial support in the normal:
+        if (baseInfo.normal.alt.spanPairCount > 1) isNonzeroSomaticQuality=false;
+        if (baseInfo.normal.alt.confidentSplitReadCount > 5) isNonzeroSomaticQuality=false;
+
+        if (isNonzeroSomaticQuality)
+        {
+            const bool lowPairSupport(baseInfo.tumor.alt.spanPairCount < 6);
+            const bool lowSplitSupport(baseInfo.tumor.alt.confidentSplitReadCount < 6);
+            const bool lowSingleSupport((baseInfo.tumor.alt.bp1SpanReadCount < 14) || (baseInfo.tumor.alt.bp2SpanReadCount < 14));
+            const bool highSingleContam((baseInfo.normal.alt.bp1SpanReadCount > 1) || (baseInfo.normal.alt.bp2SpanReadCount > 1));
+
+            /// allow single pair support to rescue an SV only if the evidence looks REALLY good:
+            if ((lowPairSupport && lowSplitSupport) && (lowSingleSupport || highSingleContam))
+                isNonzeroSomaticQuality=false;
+        }
+
+        if (isNonzeroSomaticQuality)
+        {
+            if (baseInfo.normal.alt.spanPairCount)
+            {
+                const double ratio(static_cast<double>(baseInfo.tumor.alt.spanPairCount)/static_cast<double>(baseInfo.normal.alt.spanPairCount));
+                if (ratio<9)
+                {
+                    isNonzeroSomaticQuality=false;
+                }
+            }
+            if (baseInfo.normal.alt.bp1SpanReadCount)
+            {
+                const double ratio(static_cast<double>(baseInfo.tumor.alt.bp1SpanReadCount)/static_cast<double>(baseInfo.normal.alt.bp1SpanReadCount));
+                if (ratio<9)
+                {
+                    isNonzeroSomaticQuality=false;
+                }
+            }
+            if (baseInfo.normal.alt.bp2SpanReadCount)
+            {
+                const double ratio(static_cast<double>(baseInfo.tumor.alt.bp2SpanReadCount)/static_cast<double>(baseInfo.normal.alt.bp2SpanReadCount));
+                if (ratio<9)
+                {
+                    isNonzeroSomaticQuality=false;
+                }
+            }
+        }
+
+        {
+            // there needs to be some ref support in the normal as well:
+            const bool normRefPairSupport(baseInfo.normal.ref.spanPairCount > 6);
+            const bool normRefSplitSupport(baseInfo.normal.ref.confidentSplitReadCount > 6);
+
+            if (! (normRefPairSupport || normRefSplitSupport)) isNonzeroSomaticQuality=false;
+        }
+
+        if (isNonzeroSomaticQuality) somaticInfo.somaticScore=60;
+    }
+
+
+    //
+    // apply filters
+    //
+    {
+        if (dFilter.isMaxDepthFilter())
+        {
+            // apply maxdepth filter if either of the breakpoints exceeds the maximum depth:
+            if (baseInfo.bp1MaxDepth > dFilter.maxDepth(sv.bp1.interval.tid))
+            {
+                baseInfo.filters.insert(somaticOpt.maxDepthFilterLabel);
+            }
+            else if (baseInfo.bp2MaxDepth > dFilter.maxDepth(sv.bp2.interval.tid))
+            {
+                baseInfo.filters.insert(somaticOpt.maxDepthFilterLabel);
+            }
+        }
+    }
+}
+
+
+
 void
 SVScorer::
-scoreSomaticSV(
+scoreSV(
     const SVCandidateSetData& svData,
     const SVCandidateAssemblyData& assemblyData,
     const SVCandidate& sv,
-    SomaticSVScoreInfo& ssInfo)
+    const bool isSomatic,
+    SVModelScoreInfo& modelScoreInfo)
 {
-    ssInfo.clear();
+    modelScoreInfo.clear();
 
-    // get breakend center_pos depth estimate:
-    ssInfo.bp1MaxDepth=(getBreakendMaxMappedDepth(sv.bp1));
-    ssInfo.bp2MaxDepth=(getBreakendMaxMappedDepth(sv.bp2));
+    // accumulate model-neutral evidence for each candidate (or its corresponding reference allele)
+    SVEvidence evidence;
+    scoreSV(svData, assemblyData, sv, modelScoreInfo.base, evidence);
 
-    // Get Data on standard read pairs crossing the two breakends,
-    // and get a breakend depth estimate
+    // score components specific to diploid-germline model:
+    scoreDiploidSV(_diploidOpt, _diploidDopt, sv, _dFilterDiploid, evidence, modelScoreInfo.base, modelScoreInfo.diploid);
 
-    // apply filters
-    if (_dFilter.isMaxDepthFilter())
-    {
-        if (ssInfo.bp1MaxDepth > _dFilter.maxDepth(sv.bp1.interval.tid))
-        {
-            ssInfo.filters.insert(_somaticOpt.maxDepthFilterLabel);
-        }
-        else if (ssInfo.bp2MaxDepth > _dFilter.maxDepth(sv.bp2.interval.tid))
-        {
-            ssInfo.filters.insert(_somaticOpt.maxDepthFilterLabel);
-        }
-
-    }
-
-    // extract SV alignment info for split read evidence
-    const SVAlignmentInfo SVAlignInfo(sv, assemblyData);
-
-    // first exercise -- just count the sample assignment of the pairs we already have:
-    const unsigned bamCount(_bamStreams.size());
-    for (unsigned bamIndex(0); bamIndex < bamCount; ++bamIndex)
-    {
-        const bool isTumor(_isAlignmentTumor[bamIndex]);
-        SVSampleInfo& sample(isTumor ? ssInfo.tumor : ssInfo.normal);
-
-        // consider 2-locus events first
-        // TODO: to add local assembly later
-
-        // apply the split-read scoring, only when:
-        // 1) the SV is precise, i.e. has successful somatic contigs;
-        // 2) the values of max depth are reasonable (otherwise, the read map may blow out).
-        if ((assemblyData.isSpanning) &&
-            (!sv.isImprecise()) &&
-            (ssInfo.bp1MaxDepth <= 2*_dFilter.maxDepth(sv.bp1.interval.tid)) &&
-            (ssInfo.bp2MaxDepth <= 2*_dFilter.maxDepth(sv.bp2.interval.tid)))
-        {
-            read_map_t readMap;
-
-            streamPtr& bamPtr(_bamStreams[bamIndex]);
-            bam_streamer& read_stream(*bamPtr);
-            // scoring split reads overlapping bp1
-            scoreSplitReads(true, sv.bp1, SVAlignInfo, readMap,
-                            read_stream, sample);
-            // scoring split reads overlapping bp2
-            scoreSplitReads(false, sv.bp2, SVAlignInfo, readMap,
-                            read_stream, sample);
-        }
-
-
-        const SVCandidateSetReadPairSampleGroup& svDataGroup(svData.getDataGroup(bamIndex));
-        BOOST_FOREACH(const SVCandidateSetReadPair& pair, svDataGroup)
-        {
-            if (0 == std::count(pair.svIndex.begin(),pair.svIndex.end(), sv.candidateIndex)) continue;
-
-            if (pair.read1.isSet())
-            {
-                sample.bp1SpanReads += 1;
-            }
-            if (pair.read2.isSet())
-            {
-                sample.bp2SpanReads += 1;
-            }
-            if (pair.read1.isSet() && pair.read2.isSet())
-            {
-                sample.spanPairs += 1;
-            }
-        }
-    }
-
-    // consider 2-locus events first
-    // TODO: to add local assembly later
-    if ((assemblyData.isSpanning) &&
-        (!sv.isImprecise()))
-    {
-        // root mean square
-        if (ssInfo.tumor.contigSRCount > 0)
-            ssInfo.tumor.contigSRMapQ = sqrt(ssInfo.tumor.contigSRMapQ / (float)ssInfo.tumor.contigSRCount);
-        if (ssInfo.tumor.refSRCount > 0)
-            ssInfo.tumor.refSRMapQ = sqrt(ssInfo.tumor.refSRMapQ / (float)ssInfo.tumor.refSRCount);
-        if (ssInfo.normal.contigSRCount > 0)
-            ssInfo.normal.contigSRMapQ = sqrt(ssInfo.normal.contigSRMapQ / (float)ssInfo.normal.contigSRCount);
-        if (ssInfo.normal.refSRCount > 0)
-            ssInfo.normal.refSRMapQ = sqrt(ssInfo.normal.refSRMapQ / (float)ssInfo.normal.refSRCount);
-
-#ifdef DEBUG_SVS
-        log_os << "tumor contig SP count: " << ssInfo.tumor.contigSRCount << "\n";
-        log_os << "tumor contig SP evidence: " << ssInfo.tumor.contigSREvidence << "\n";
-        log_os << "tumor contig SP_mapQ: " << ssInfo.tumor.contigSRMapQ << "\n";
-        log_os << "normal contig SP count: " << ssInfo.normal.contigSRCount << "\n";
-        log_os << "normal contig SP evidence: " << ssInfo.normal.contigSREvidence << "\n";
-        log_os << "normal contig SP_mapQ: " << ssInfo.normal.contigSRMapQ << "\n";
-
-        log_os << "tumor ref SP count: " << ssInfo.tumor.refSRCount << "\n";
-        log_os << "tumor ref SP evidence: " << ssInfo.tumor.refSREvidence << "\n";
-        log_os << "tumor ref SP_mapQ: " << ssInfo.tumor.refSRMapQ << "\n";
-        log_os << "normal ref SP count: " << ssInfo.normal.refSRCount << "\n";
-        log_os << "normal ref SP evidence: " << ssInfo.normal.refSREvidence << "\n";
-        log_os << "normal ref SP_mapQ: " << ssInfo.normal.refSRMapQ << "\n";
-#endif
-    }
-
-    // assign bogus somatic score just to get started:
-    bool isSomatic(true);
-    if ((ssInfo.normal.spanPairs > 1))
-        isSomatic=false;
-
+    // score components specific to somatic model:
     if (isSomatic)
     {
-        const bool lowPairSupport(ssInfo.tumor.spanPairs < 6);
-        const bool lowSingleSupport((ssInfo.tumor.bp1SpanReads < 14) || (ssInfo.tumor.bp2SpanReads < 14));
-        const bool highSingleContam((ssInfo.normal.bp1SpanReads > 1) || (ssInfo.normal.bp2SpanReads > 1));
-
-        /// allow single pair support to rescue an SV only if the evidence looks REALLY good:
-        if (lowPairSupport && (lowSingleSupport || highSingleContam))
-            isSomatic=false;
+        scoreSomaticSV(_somaticOpt, sv, _dFilterSomatic, modelScoreInfo.base, modelScoreInfo.somatic);
     }
-
-    if (isSomatic)
-    {
-        if (ssInfo.normal.spanPairs)
-        {
-            const double ratio(static_cast<double>(ssInfo.tumor.spanPairs)/static_cast<double>(ssInfo.normal.spanPairs));
-            if (ratio<9)
-            {
-                isSomatic=false;
-            }
-        }
-        if (ssInfo.normal.bp1SpanReads)
-        {
-            const double ratio(static_cast<double>(ssInfo.tumor.bp1SpanReads)/static_cast<double>(ssInfo.normal.bp1SpanReads));
-            if (ratio<9)
-            {
-                isSomatic=false;
-            }
-        }
-        if (ssInfo.normal.bp2SpanReads)
-        {
-            const double ratio(static_cast<double>(ssInfo.tumor.bp2SpanReads)/static_cast<double>(ssInfo.normal.bp2SpanReads));
-            if (ratio<9)
-            {
-                isSomatic=false;
-            }
-        }
-    }
-
-    if (isSomatic) ssInfo.somaticScore=60;
 }
 
 

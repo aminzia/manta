@@ -25,7 +25,8 @@ BOOST_AUTO_TEST_SUITE( test_SVLocusScanner )
 
 BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromReadIndels )
 {
-    ReadScannerOptions opt;
+    const ReadScannerOptions opt;
+    const ReadScannerDerivOptions dopt(opt);
 
     ALIGNPATH::path_t inputPath;
     cigar_to_apath("100M2000D100M",inputPath);
@@ -34,12 +35,11 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromReadIndels )
     bam1_t* bamDataPtr(bamRead.get_data());
     edit_bam_cigar(inputPath,*bamDataPtr);
 
-    SimpleAlignment align(bamRead);
+    ChromAlignment align(bamRead);
 
     std::vector<SVCandidate> candidates;
 
-    getSVCandidatesFromReadIndels(opt,align,0,candidates);
-
+    getSVCandidatesFromReadIndels(opt, dopt, align, candidates);
 
     BOOST_REQUIRE_EQUAL(candidates.size(),1u);
     BOOST_REQUIRE(candidates[0].bp1.interval.range.is_pos_intersect(100));
@@ -64,7 +64,10 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromSemiAligned )
     // initialize test qual array to all Q30's:
     static const unsigned seqSize((sizeof(testSeq)-1)/sizeof(char));
     uint8_t qual[seqSize];
-    for(unsigned i(0);i<seqSize;++i) { qual[i] = 30; }
+    for (unsigned i(0); i<seqSize; ++i)
+    {
+        qual[i] = 30;
+    }
 
     edit_bam_read_and_quality(testSeq,qual,*bamDataPtr);
 

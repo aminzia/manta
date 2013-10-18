@@ -30,12 +30,14 @@
 #include "manta/SVCandidateAssemblyData.hh"
 #include "manta/SVCandidateUtil.hh"
 #include "format/VcfWriterCandidateSV.hh"
+#include "format/VcfWriterDiploidSV.hh"
 #include "format/VcfWriterSomaticSV.hh"
 
 #include "boost/foreach.hpp"
 
 #include <iostream>
 #include <memory>
+#include <time.h>
 
 //#define DEBUG_GSV
 
@@ -92,14 +94,18 @@ struct SVWriter
         isSomatic(! opt.somaticOutputFilename.empty()),
         svScore(opt, cset.header),
         candfs(opt.candidateOutputFilename),
+        dipfs(opt.diploidOutputFilename),
         somfs(opt.somaticOutputFilename),
         candWriter(opt.referenceFilename,cset,candfs.getStream()),
+        diploidWriter(opt.diploidOpt, (! opt.chromDepthFilename.empty()),
+                      opt.referenceFilename,cset,dipfs.getStream()),
         somWriter(opt.somaticOpt, (! opt.chromDepthFilename.empty()),
                   opt.referenceFilename,cset,somfs.getStream())
     {
         if (0 == opt.edgeOpt.binIndex)
         {
             candWriter.writeHeader(progName, progVersion);
+            diploidWriter.writeHeader(progName, progVersion);
             if (isSomatic) somWriter.writeHeader(progName, progVersion);
         }
     }
@@ -125,7 +131,7 @@ struct SVWriter
             if (sv.isImprecise())
             {
 #ifdef DEBUG_GSV
-                log_os << logtag << " rejecting candidate, imprecise self-edge\n";
+                log_os << logtag << " rejecting candidate: imprecise self-edge\n";
 #endif
                 return;
             }
@@ -135,9 +141,8 @@ struct SVWriter
             if (sv.bp1.pairCount < minCandidatePairCount)
             {
 #ifdef DEBUG_GSV
-                log_os << logtag << " rejecting candidate, minCandidatePairCount\n";
+                log_os << logtag << " rejecting candidate: minCandidatePairCount\n";
 #endif
-
                 return;
             }
         }
@@ -162,13 +167,18 @@ struct SVWriter
             return;
         }
 
+        svScore.scoreSV(svData, assemblyData, sv, isSomatic, modelScoreInfo);
+
+        if (modelScoreInfo.diploid.altScore >= opt.diploidOpt.minOutputAltScore)
+        {
+            diploidWriter.writeSV(edge, svData, assemblyData, sv, modelScoreInfo);
+        }
+
         if (isSomatic)
         {
-            svScore.scoreSomaticSV(svData, assemblyData, sv, ssInfo);
-
-            if (ssInfo.somaticScore > opt.somaticOpt.minOutputSomaticScore)
+            if (modelScoreInfo.somatic.somaticScore > opt.somaticOpt.minOutputSomaticScore)
             {
-                somWriter.writeSV(edge, svData, assemblyData, sv, ssInfo);
+                somWriter.writeSV(edge, svData, assemblyData, sv, modelScoreInfo);
             }
         }
     }
@@ -178,17 +188,27 @@ struct SVWriter
     const bool isSomatic;
 
     SVScorer svScore;
-    SomaticSVScoreInfo ssInfo;
+    SVModelScoreInfo modelScoreInfo;
 
     OutStream candfs;
+    OutStream dipfs;
     OutStream somfs;
 
     VcfWriterCandidateSV candWriter;
+    VcfWriterDiploidSV diploidWriter;
     VcfWriterSomaticSV somWriter;
 };
 
 
 #if 0
+/// edge indices+graph evidence counts and regions:
+///
+/// this is designed to be useful even when the locus graph is not present
+struct EhancedEdgeInfo
+{
+
+};
+
 /// reduce the full (very-large) graph down to just the information we need during SVCandidate generation:
 struct ReducedGraphInfo
 {
@@ -227,48 +247,61 @@ runGSC(
     SVCandidateSetData svData;
     std::vector<SVCandidate> svs;
 
-#ifdef DEBUG_GSV
     static const std::string logtag("runGSC");
-    log_os << logtag << " " << cset.header << "\n";
-#endif
+    if (opt.isVerbose)
+    {
+        log_os << logtag << " " << cset.header << "\n";
+    }
+
+    const std::map<std::string, int32_t>& chromToIndex(cset.header.chrom_to_index);
 
     while (edger.next())
     {
         const EdgeInfo& edge(edger.getEdge());
 
-#ifdef DEBUG_GSV
-        log_os << logtag << " starting analysis of edge: ";
-        dumpEdgeInfo(edge,cset,log_os);
-#endif
+        clock_t startTime(0);
+        if (opt.isVerbose)
+        {
+            log_os << logtag << " starting analysis of edge: ";
+            dumpEdgeInfo(edge,cset,log_os);
+            startTime = clock();
+        }
 
         try
         {
             // find number, type and breakend range (or better: breakend distro) of SVs on this edge:
-            svFind.findCandidateSV(edge, svData, svs);
+            svFind.findCandidateSV(chromToIndex, edge, svData, svs);
 
-#ifdef DEBUG_GSV
-            log_os << logtag << " low-res candidate generation complete. candidate count: " << svs.size() << "\n";
-#endif
+            if (opt.isVerbose)
+            {
+                log_os << logtag << " Low-resolution candidate generation complete. Candidate count: " << svs.size() << "\n";
+            }
+
             BOOST_FOREACH(const SVCandidate& candidateSV, svs)
             {
+                if (opt.isVerbose)
+                {
+                    log_os << logtag << " Starting analysis of low-resolution candidate: " << candidateSV.candidateIndex << "\n";
+                }
 #ifdef DEBUG_GSV
-                log_os << logtag << " starting low-res candidate analysis: " << candidateSV << "\n";
+                log_os << logtag << " CandidateSV: " << candidateSV << "\n";
 #endif
                 SVCandidateAssemblyData assemblyData;
 
                 if (! opt.isSkipAssembly)
                 {
                     svRefine.getCandidateAssemblyData(candidateSV, svData, assemblyData);
-                }
 
-#ifdef DEBUG_GSV
-                log_os << logtag << " assembly candidate refinement complete. assembly count: " << assemblyData.svs.size() << "\n";
-#endif
+                    if (opt.isVerbose)
+                    {
+                        log_os << logtag << " Candidate assembly complete. Assembled candidate count: " << assemblyData.svs.size() << "\n";
+                    }
+                }
 
                 if (assemblyData.svs.empty())
                 {
 #ifdef DEBUG_GSV
-                    log_os << logtag << " score and output low-res candidate: " << candidateSV << "\n";
+                    log_os << logtag << " score and output low-res candidate\n";
 #endif
                     svWriter.writeSV(edge, svData, assemblyData, candidateSV);
                 }
@@ -297,6 +330,14 @@ runGSC(
             dumpEdgeInfo(edge,cset,log_os);
             throw;
         }
+
+        if (opt.isVerbose)
+        {
+            static const double clockFactor(1./static_cast<double>(CLOCKS_PER_SEC));
+
+            const double elapsedSec(( clock() - startTime )*clockFactor);
+            log_os << logtag << " Processing this edge took " << elapsedSec << " seconds.\n";
+        }
     }
 }
 
@@ -309,5 +350,8 @@ runInternal(int argc, char* argv[]) const
     GSCOptions opt;
 
     parseGSCOptions(*this,argc,argv,opt);
+#ifdef DEBUG_GSV
+    opt.isVerbose=true;
+#endif
     runGSC(opt, name(), version());
 }

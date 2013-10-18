@@ -92,10 +92,7 @@ add(const bam_record& bamRead,
     }
     if (targetReadPtr->isSet())
     {
-        if (isExpectRepeat)
-        {
-            return;
-        }
+        if (isExpectRepeat || bamRead.is_supplement()) return;
 
         std::ostringstream oss;
         oss << "Unexpected read name collision.\n"
@@ -103,7 +100,11 @@ add(const bam_record& bamRead,
             << "\tNew read: " << bamRead << "\n";
         BOOST_THROW_EXCEPTION(LogicException(oss.str()));
     }
-    targetReadPtr->bamrec = bamRead;
+
+    if (! bamRead.is_supplement())
+    {
+        targetReadPtr->bamrec = bamRead;
+    }
 }
 
 

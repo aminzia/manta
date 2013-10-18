@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <stdint.h>
+
 #include <string>
 #include <iostream>
 
@@ -27,7 +29,8 @@ struct SRAlignmentInfo
         _rightSize(0),
         _leftMismatches(0),
         _rightMismatches(0),
-        _alignScore(0)
+        _alignScore(0),
+        _alignLnLhood(0)
     {}
 
     unsigned get_leftSize() const
@@ -55,6 +58,11 @@ struct SRAlignmentInfo
         return _alignScore;
     }
 
+    float get_alignLnLhood() const
+    {
+        return _alignLnLhood;
+    }
+
     void set_sizes(unsigned lfs, unsigned rfs)
     {
         _leftSize = lfs;
@@ -72,15 +80,22 @@ struct SRAlignmentInfo
         _alignScore = asc;
     }
 
+    void set_lnLhood(float alh)
+    {
+        _alignLnLhood = alh;
+    }
 
     void update_alignInfo(
         const SRAlignmentInfo& info)
     {
+        if (&info == this) return;
+
         _leftSize = info._leftSize;
         _rightSize = info._rightSize;
         _leftMismatches = info._leftMismatches;
         _rightMismatches = info._rightMismatches;
         _alignScore = info._alignScore;
+        _alignLnLhood = info._alignLnLhood;
     }
 
 private:
@@ -89,13 +104,13 @@ private:
     unsigned _leftMismatches;
     unsigned _rightMismatches;
     unsigned _alignScore;
-
+    float _alignLnLhood;
 };
 
 
-struct splitReadAlignment
+struct SplitReadAlignment
 {
-    splitReadAlignment():
+    SplitReadAlignment():
         _hasEvidence(false),
         _evidence(0)
     {}
@@ -118,13 +133,15 @@ struct splitReadAlignment
     unsigned
     calculateAlignScore(
         const std::string& querySeq,
-        const std::string& scanWindow);
+        const uint8_t* queryQual,
+        const std::string::const_iterator& scanWindowBegin,
+        const std::string::const_iterator& scanWindowEnd);
 
     void
     align(const std::string& querySeq,
+          const uint8_t* queryQual,
           const std::string& targetSeq,
           const unsigned bpOffset);
-
 
 private:
 
@@ -140,4 +157,4 @@ std::ostream&
 operator<<(std::ostream& os, const SRAlignmentInfo& info);
 
 std::ostream&
-operator<<(std::ostream& os, const splitReadAlignment& srAlign);
+operator<<(std::ostream& os, const SplitReadAlignment& srAlign);

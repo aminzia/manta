@@ -12,23 +12,21 @@
 //
 
 ///
+/// \author Chris Saunders
 ///
-///
 
-#pragma once
+#include "blt_util/ReadKey.hh"
 
-#include "blt_util/bam_record.hh"
+#include <iostream>
 
 
-/// is this read part of mapped pair with 'Innie' orientation?
-///
-/// Note this does not test MAPQ or fragment size, but could
-/// be used as the core of a 'proper-pair' predicate
-bool
-is_innie_pair(
-    const bam_record& bam_read);
 
-/// return average basecall qscore for this read
-unsigned
-get_avg_quality(
-    const bam_record& bam_read);
+std::ostream&
+operator<<(
+    std::ostream& os,
+    const ReadKey& rk)
+{
+    os << rk.qname() << '/' << rk.readNo();
+    return os;
+}
+

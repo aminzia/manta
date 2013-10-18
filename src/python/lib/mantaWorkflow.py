@@ -44,6 +44,14 @@ __version__ = getVersion()
 
 
 
+def cleanId(input_id) :
+    """
+    filter id so that it's safe to use as a pyflow indentifier
+    """
+    import re
+    return re.sub(r'([^a-zA-Z0-9_\-])', "_", input_id)
+
+
 
 class GenomeSegment(object) :
     """
@@ -58,15 +66,16 @@ class GenomeSegment(object) :
     4. chromosome segment (ie. bin) number (0-indexed)
     """
 
-    def __init__(self,chrom,beginPos,endPos,binId) :
+    def __init__(self,chromIndex,chromLabel,beginPos,endPos,binId) :
         """
         arguments are the 4 genomic interval descriptors detailed in class documentation
         """
-        self.chrom = chrom
-        self.bamRegion = chrom + ':' + str(beginPos) + '-' + str(endPos)
+        self.chromLabel = chromLabel
+        self.bamRegion = chromLabel + ':' + str(beginPos) + '-' + str(endPos)
         self.binId = binId
         self.binStr = str(binId).zfill(4)
-        self.id = chrom + "_" + self.binStr
+        self.id = chromLabel + "_" + self.binStr
+        self.pyflowId = "chromId_%s_%s_%s" % (str(chromIndex).zfill(3), cleanId(chromLabel), self.binStr)
 
 
 
@@ -75,8 +84,8 @@ def getNextGenomeSegment(params) :
     generator which iterates through all genomic segments and
     returns a segmentValues object for each one.
     """
-    for (chrom,beginPos,endPos,binId) in getChromIntervals(params.chromOrder,params.chromSizes,params.binSize) :
-        yield GenomeSegment(chrom,beginPos,endPos,binId)
+    for segval in getChromIntervals(params.chromOrder,params.chromSizes,params.binSize) :
+        yield GenomeSegment(*segval)
 
 
 
@@ -156,13 +165,12 @@ def runLocusGraph(self,taskPrefix="",dependencies=None):
         graphCmd.extend(["--align-stats",statsPath])
         graphCmd.extend(["--region",gseg.bamRegion])
         graphCmd.extend(["--min-candidate-sv-size", self.params.minCandidateVariantSize])
-        graphCmd.extend(["--ref",self.params.referenceFasta])
         for bamPath in self.params.normalBamList :
             graphCmd.extend(["--align-file",bamPath])
         for bamPath in self.params.tumorBamList :
             graphCmd.extend(["--tumor-align-file",bamPath])
 
-        graphTaskLabel=preJoin(taskPrefix,"makeLocusGraph_"+gseg.id)
+        graphTaskLabel=preJoin(taskPrefix,"makeLocusGraph_"+gseg.pyflowId)
         graphTasks.add(self.addTask(graphTaskLabel,graphCmd,dependencies=dirTask,memMb=self.params.estimateMemMb))
 
     mergeCmd = [ self.params.mantaGraphMergeBin ]
@@ -208,13 +216,19 @@ def runHyGen(self, taskPrefix="", dependencies=None) :
 
     isSomatic = (len(self.params.normalBamList) and len(self.params.tumorBamList))
 
+    hyGenMemMb = self.params.hyGenLocalMemMb
+    if self.getRunMode() == "sge" :
+        hyGenMemMb = self.params.hyGenSGEMemMb
+
     hygenTasks=set()
     candidateVcfPaths = []
+    diploidVcfPaths = []
     somaticVcfPaths = []
 
     for binId in range(self.params.nonlocalWorkBins) :
         binStr = str(binId).zfill(4)
         candidateVcfPaths.append(self.paths.getHyGenCandidatePath(binStr))
+        diploidVcfPaths.append(self.paths.getHyGenDiploidPath(binStr))
         if isSomatic :
             somaticVcfPaths.append(self.paths.getHyGenSomaticPath(binStr))
 
@@ -227,6 +241,7 @@ def runHyGen(self, taskPrefix="", dependencies=None) :
         hygenCmd.extend(["--min-scored-sv-size", self.params.minScoredVariantSize])
         hygenCmd.extend(["--ref",self.params.referenceFasta])
         hygenCmd.extend(["--candidate-output-file", candidateVcfPaths[-1]])
+        hygenCmd.extend(["--diploid-output-file", diploidVcfPaths[-1]])
         if isSomatic :
             hygenCmd.extend(["--somatic-output-file", somaticVcfPaths[-1]])
 
@@ -240,7 +255,7 @@ def runHyGen(self, taskPrefix="", dependencies=None) :
             hygenCmd.extend(["--tumor-align-file", bamPath])
 
         hygenTaskLabel=preJoin(taskPrefix,"generateCandidateSV_"+binStr)
-        hygenTasks.add(self.addTask(hygenTaskLabel,hygenCmd,dependencies=dirTask, memMb=self.params.hyGenMemMb))
+        hygenTasks.add(self.addTask(hygenTaskLabel,hygenCmd,dependencies=dirTask, memMb=hyGenMemMb))
 
     nextStepWait = hygenTasks
 
@@ -251,18 +266,16 @@ def runHyGen(self, taskPrefix="", dependencies=None) :
         cmd += " | %s -c > %s && %s -p vcf %s" % (self.params.bgzipBin, outPath, self.params.tabixBin, outPath)
         return cmd
 
-    # consolidate output:
-    if len(candidateVcfPaths) :
-        outPath = self.paths.getSortedCandidatePath()
-        candSortCmd = getVcfSortCmd(candidateVcfPaths,outPath)
-        candSortLabel=preJoin(taskPrefix,"sortCandidateSV")
-        nextStepWait.add(self.addTask(candSortLabel,candSortCmd,dependencies=hygenTasks))
+    def sortVcfs(pathList, outPath, label) :
+        if len(pathList) == 0 : return
 
-    if len(somaticVcfPaths) :
-        outPath = self.paths.getSortedSomaticPath()
-        candSortCmd = getVcfSortCmd(somaticVcfPaths,outPath)
-        candSortLabel=preJoin(taskPrefix,"sortSomaticSV")
-        nextStepWait.add(self.addTask(candSortLabel,candSortCmd,dependencies=hygenTasks))
+        sortCmd = getVcfSortCmd(pathList,outPath)
+        sortLabel=preJoin(taskPrefix,label)
+        nextStepWait.add(self.addTask(sortLabel,sortCmd,dependencies=hygenTasks))
+
+    sortVcfs(candidateVcfPaths, self.paths.getSortedCandidatePath(), "sortCandidateSV")
+    sortVcfs(diploidVcfPaths, self.paths.getSortedDiploidPath(), "sortDiploidSV")
+    sortVcfs(somaticVcfPaths, self.paths.getSortedSomaticPath(), "sortSomaticSV")
 
     return nextStepWait
 
@@ -296,6 +309,12 @@ class PathInfo:
 
     def getSortedCandidatePath(self) :
         return os.path.join(self.params.variantsDir,"candidateSV.vcf.gz")
+
+    def getHyGenDiploidPath(self, binStr) :
+        return os.path.join(self.getHyGenDir(),"diploidSV.%s.vcf" % (binStr))
+
+    def getSortedDiploidPath(self) :
+        return os.path.join(self.params.variantsDir,"diploidSV.vcf.gz")
 
     def getHyGenSomaticPath(self, binStr) :
         return os.path.join(self.getHyGenDir(),"somaticSV.%s.vcf" % (binStr))

@@ -34,7 +34,6 @@ static const bool isExcludeUnpaired(true);
 
 #ifdef DEBUG_SVDATA
 #include "blt_util/log.hh"
-#include <iostream>
 #endif
 
 
@@ -63,6 +62,7 @@ SVFinder(const GSCOptions& opt) :
 static
 void
 addSVNodeRead(
+    const std::map<std::string, int32_t>& chromToIndex,
     const SVLocusScanner& scanner,
     const SVLocusNode& localNode,
     const SVLocusNode& remoteNode,
@@ -104,7 +104,7 @@ addSVNodeRead(
 
     typedef std::vector<SVLocus> loci_t;
     loci_t loci;
-    scanner.getSVLoci(bamRead,bamIndex,loci,"NA",false);
+    scanner.getSVLoci(bamRead,bamIndex,"NA",false,chromToIndex,loci);
 
     BOOST_FOREACH(const SVLocus& locus, loci)
     {
@@ -134,6 +134,7 @@ addSVNodeRead(
 void
 SVFinder::
 addSVNodeData(
+    const std::map<std::string, int32_t>& chromToIndex,
     const SVLocus& locus,
     const NodeIndexType localNodeIndex,
     const NodeIndexType remoteNodeIndex,
@@ -146,11 +147,20 @@ addSVNodeData(
 
     searchInterval.range.merge_range(localNode.getEvidenceRange());
 
-    const bool isExpectRepeat(svData.setNewSearchInterval(searchInterval));
+    bool isExpectRepeat(svData.setNewSearchInterval(searchInterval));
+
+    /// This is a temporary measure to make the qname collision detection much looser
+    /// problems have come up where very large deletions are present in a read, and it is therefore
+    /// detected as a repreat in two differnt regions, even though they are separated by a considerable
+    /// distance. Solution is temporaryily turn off collision detection whenever two regions are on
+    /// the same chrom (ie. almost always)
+    ///
+    /// TODO: restore more precise collision detection
+    if (! isExpectRepeat) isExpectRepeat = (localNode.getInterval().tid == remoteNode.getInterval().tid);
 
 #ifdef DEBUG_SVDATA
-    log_os << "addSVNodeData: bp_interval: " << localNode.interval
-           << " evidenceInterval: " << localNode.evidenceRange
+    log_os << "addSVNodeData: bp_interval: " << localNode.getInterval()
+           << " evidenceInterval: " << localNode.getEvidenceRange()
            << " searchInterval: " << searchInterval
            << " isExpectRepeat: " << isExpectRepeat
            << "\n";
@@ -174,7 +184,7 @@ addSVNodeData(
             const bam_record& bamRead(*(read_stream.get_record_ptr()));
 
             // test if read supports an SV on this edge, if so, add to SVData
-            addSVNodeRead(_readScanner,localNode,remoteNode,bamRead, bamIndex,isExpectRepeat,svDataGroup);
+            addSVNodeRead(chromToIndex,_readScanner,localNode,remoteNode,bamRead, bamIndex,isExpectRepeat,svDataGroup);
         }
         bamIndex++;
     }
@@ -376,6 +386,7 @@ consolidateOverlap(
 void
 SVFinder::
 getCandidatesFromData(
+    const std::map<std::string, int32_t>& chromToIndex,
     SVCandidateSetData& svData,
     std::vector<SVCandidate>& svs)
 {
@@ -406,7 +417,7 @@ getCandidatesFromData(
             const bam_record* remoteBamRecPtr( remoteReadPtr->isSet() ? &(remoteReadPtr->bamrec) : NULL);
 
             readCandidates.clear();
-            _readScanner.getBreakendPair(localReadPtr->bamrec, remoteBamRecPtr, bamIndex, readCandidates,false);
+            _readScanner.getBreakendPair(localReadPtr->bamrec, remoteBamRecPtr, bamIndex, false, chromToIndex, readCandidates);
 
 #ifdef DEBUG_SVDATA
             log_os << "Checking pair: " << pair << "\n";
@@ -490,6 +501,7 @@ getCandidatesFromData(
 void
 SVFinder::
 findCandidateSV(
+    const std::map<std::string, int32_t>& chromToIndex,
     const EdgeInfo& edge,
     SVCandidateSetData& svData,
     std::vector<SVCandidate>& svs)
@@ -564,13 +576,13 @@ findCandidateSV(
     // come up with an ultra-simple model-free scoring rule: >10 obs = Q60,k else Q0
     //
 
-    addSVNodeData(locus,edge.nodeIndex1,edge.nodeIndex2,svData);
+    addSVNodeData(chromToIndex, locus,edge.nodeIndex1,edge.nodeIndex2,svData);
     if (edge.nodeIndex1 != edge.nodeIndex2)
     {
-        addSVNodeData(locus,edge.nodeIndex2,edge.nodeIndex1,svData);
+        addSVNodeData(chromToIndex, locus,edge.nodeIndex2,edge.nodeIndex1,svData);
     }
 
-    getCandidatesFromData(svData,svs);
+    getCandidatesFromData(chromToIndex, svData,svs);
 
     /*#ifdef DEBUG_SVDATA
         checkResult(svData,svs);

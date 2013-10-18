@@ -12,23 +12,22 @@
 //
 
 ///
+/// \author Chris Saunders and Xiaoyu Chen
 ///
-///
 
-#pragma once
-
-#include "blt_util/bam_record.hh"
+#include "SVScorerShared.hh"
 
 
-/// is this read part of mapped pair with 'Innie' orientation?
-///
-/// Note this does not test MAPQ or fragment size, but could
-/// be used as the core of a 'proper-pair' predicate
-bool
-is_innie_pair(
-    const bam_record& bam_read);
 
-/// return average basecall qscore for this read
-unsigned
-get_avg_quality(
-    const bam_record& bam_read);
+void
+setReadEvidence(
+    const unsigned minMapQ,
+    const bam_record& bamRead,
+    SVFragmentEvidenceRead& read)
+{
+    if (read.isScanned) return;
+
+    read.isScanned = true;
+    read.mapq = bamRead.map_qual();
+    read.isAnchored = (read.mapq >= minMapQ);
+}
