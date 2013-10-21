@@ -31,6 +31,8 @@
 
 #include "boost/foreach.hpp"
 
+#include <cmath>
+
 
 //#define DEBUG_SCANNER
 
@@ -417,9 +419,6 @@ isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
 	ALIGNPATH::path_t apath;
     bam_cigar_to_apath(bamRead.raw_cigar(),bamRead.n_cigar(),apath);
 
-	/*std::cerr << "ref = " << refSeq << std::endl;
-	std::cerr << "qry = " << qrySeq << std::endl;
-    std::cerr << "apath = " << apath << std::endl;*/
     apath_add_seqmatch(qrySeq.begin(), qrySeq.end(),
     				   refSeq.begin(), refSeq.end(),
     		           apath);
@@ -431,6 +430,12 @@ isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
     static const std::string logtag("isSemiAligned");
     log_os << logtag << " semi-aligned score=" << semiAlignedScore << " read qname=" << bamRead.qname() << " apath=" << apath <<  std::endl;
 #endif
+    if (std::isinf(semiAlignedScore) || std::isnan(semiAlignedScore) ) {
+        std::cout << " semi-aligned score=" << semiAlignedScore << " read qname=" << bamRead.qname() << " apath=" << apath <<  std::endl;
+	    std::cerr << "ref = " << refSeq << std::endl;
+	    std::cerr << "qry = " << qrySeq << std::endl;
+        std::cerr << "apath = " << apath << std::endl;
+    }
     return (semiAlignedScore>minSemiAlignedScore);
 }
 
@@ -745,7 +750,7 @@ getSVCandidatesFromShadow(
 			return;
 		}
 	}
-	const pos_t properPairRangeOffset = rstats.properPair.min + (rstats.properPair.max-rstats.properPair.min)/2;
+	const pos_t properPairRangeOffset = static_cast<pos_t>(rstats.properPair.min + (rstats.properPair.max-rstats.properPair.min)/2);
 	const pos_t shadowGenomePos = singletonGenomePos + properPairRangeOffset;
 	candidates.push_back(GetSplitSVCandidate(opt,targetId,shadowGenomePos,shadowGenomePos,isComplex));
 }
@@ -798,7 +803,7 @@ if (retrieveLocalEvidence) {
 #ifdef DEBUG_SCANNER
     log_os << logtag << " post-semialigned candidate_size: " << candidates.size() << "\n";
 #endif
-    std::cerr << " post-semialigned candidate_size: " << candidates.size() << "\n";
+    //std::cerr << " post-semialigned candidate_size: " << candidates.size() << "\n";
     }
 
     /// - process split/SA reads:

@@ -103,7 +103,8 @@ getIntervalReferenceSegment(
     // but the ref function below takes closed-closed endpoints, so we subract one from endPos
     get_standardized_region_seq(referenceFilename, chrom, range.begin_pos(), (range.end_pos()-1), intervalRefSeq.seq());
 
-    if (intervalRefSeq.seq().size() != range.size())
+    // this breaks for chrM
+    /*if (intervalRefSeq.seq().size() != range.size())
     {
         using namespace illumina::common;
 
@@ -119,7 +120,7 @@ getIntervalReferenceSegment(
             << "\n";
 
         BOOST_THROW_EXCEPTION(LogicException(oss.str()));
-    }
+    }*/
 }
 
 static
