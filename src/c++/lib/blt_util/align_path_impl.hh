@@ -59,6 +59,8 @@ apath_add_seqmatch(
                 }
 
                 const bool isSeqMatch((*queryIndex) == (*refIndex));
+                // N always counts as match
+                if (*queryIndex == 'N') isSeqMatch = true;
                 apath_append(apath2, ( isSeqMatch ? SEQ_MATCH : SEQ_MISMATCH));
 
                 ++queryIndex;
