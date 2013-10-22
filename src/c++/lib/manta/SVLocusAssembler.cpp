@@ -197,7 +197,7 @@ getBreakendReads(
             	const int alPos(bamRead.pos()-bkptOffset-1);
             	const int alLen(apath_ref_length(apath));
                 const int refSize = bkptRef.size();
-                if (alPos >= 0 && (alPos+alLen) < refSize) 
+                if (alPos > 0 && (alPos+alLen) < refSize) 
                 {
             	    const std::string ref(bkptRef.substr((alPos-1),alLen));
                     if (isSemiAligned(bamRead,qry,ref,_scanOpt.minSemiAlignedScoreCandidates))
@@ -296,6 +296,11 @@ assembleSVBreakends(const SVBreakend& bp1,
     ReadIndexType readIndex;
     AssemblyReadInput reads;
     //AssemblyReadReversal readRev;
+    /*std::cout << "getBreakEndReads \n";
+    std::cout << "bp1 = " << bp1 <<  "\n";
+    std::cout << "bp2 = " << bp2 <<  "\n";
+    std::cout << "bkptRef1 = " << bkptRef1 <<  "\n";
+    std::cout << "bkptRef2 = " << bkptRef2 <<  "\n";*/
     getBreakendReads(bp1, isBp1Reversed, readIndex, reads, bkptRef1, bkptOffset1);
     //readRev.resize(reads.size(),isBp1Reversed);
     getBreakendReads(bp2, isBp2Reversed, readIndex, reads, bkptRef2, bkptOffset2);
