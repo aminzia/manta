@@ -408,9 +408,46 @@ getSVBreakendCandidateClip(
 }
 
 
+bool
+isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
+		      const std::string& refSeq, const double /*minSemiAlignedScore*/)
+{
+	static const unsigned maxMismatchNum(4);
+    using namespace ALIGNPATH;
+
+    // read cannot be semi-aligned if unmapped
+	if (bamRead.is_unmapped()) return false;
+	ALIGNPATH::path_t apath;
+    bam_cigar_to_apath(bamRead.raw_cigar(),bamRead.n_cigar(),apath);
+
+    apath_add_seqmatch(qrySeq.begin(), qrySeq.end(),
+    				   refSeq.begin(), refSeq.end(),
+    		           apath);
+    std::cerr << "isSemiAligned : apath = " << apath << " bamRead " << bamRead.qname() << std::endl;
+    unsigned currentMisMatch(0);
+    BOOST_FOREACH(const path_segment& ps, apath)
+	{
+//		assert((ps.type != MATCH) && "Incorrect CIGAR type, matches must be converted to SEQ_MATCH/SEQ_MISMATCH");
+		if (ps.type==SEQ_MISMATCH)
+		{
+			++currentMisMatch;
+		}
+		else
+		{
+			--currentMisMatch;
+		}
+		if (currentMisMatch>maxMismatchNum)
+		{
+			std::cout << "SEMI-ALIGNED" << std::endl;
+			return true;
+		}
+	}
+    std::cout << "NOT SEMI-ALIGNED" << std::endl;
+    return false;
+}
 
 // TODO: pass iterator instead of ref substring
-bool
+/*bool
 isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
 		      const std::string& refSeq, const double minSemiAlignedScore)
 {
@@ -430,14 +467,14 @@ isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
     static const std::string logtag("isSemiAligned");
     log_os << logtag << " semi-aligned score=" << semiAlignedScore << " read qname=" << bamRead.qname() << " apath=" << apath <<  std::endl;
 #endif
-    /*std::cout << " semi-aligned score=" << semiAlignedScore << " read qname=" << bamRead.qname() << " apath=" << apath <<  std::endl;
+    std::cout << " semi-aligned score=" << semiAlignedScore << " read qname=" << bamRead.qname() << " apath=" << apath <<  std::endl;
     if (semiAlignedScore>minSemiAlignedScore) {
         std::cout << "SEMI-ALIGNED" << std::endl;
     } else {
         std::cout << "NOT SEMI-ALIGNED" << std::endl;
-    }*/
+    }
     return (semiAlignedScore>minSemiAlignedScore);
-}
+}*/
 
 
 

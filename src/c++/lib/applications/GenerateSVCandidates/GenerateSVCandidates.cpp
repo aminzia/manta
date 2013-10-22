@@ -264,9 +264,8 @@ runGSC(
         {
             log_os << logtag << " starting analysis of edge: ";
             dumpEdgeInfo(edge,cset,log_os);
-            startTime = clock();
             // good old stackoverflow :-)
-            clock_t startTime = clock();
+            startTime = clock();
         }
 
         try
