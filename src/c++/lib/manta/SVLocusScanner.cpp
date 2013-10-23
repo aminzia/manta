@@ -407,11 +407,10 @@ getSVBreakendCandidateClip(
     }
 }
 
-
-bool
-isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
-		      const std::string& refSeq, const double /*minSemiAlignedScore*/)
-{
+//bool
+//isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
+//		      const std::string& refSeq, const double /*minSemiAlignedScore*/)
+/*{
 	static const unsigned maxMismatchNum(4);
     using namespace ALIGNPATH;
 
@@ -423,10 +422,13 @@ isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
     apath_add_seqmatch(qrySeq.begin(), qrySeq.end(),
     				   refSeq.begin(), refSeq.end(),
     		           apath);
-    std::cerr << "isSemiAligned : apath = " << apath << " bamRead " << bamRead.qname() << std::endl;
+    //std::cout << "isSemiAligned : apath = " << apath << " bamRead " << bamRead.qname() << std::endl;
     unsigned currentMisMatch(0);
+    unsigned steps(0);
+    unsigned MAX_STEP = 6;
     BOOST_FOREACH(const path_segment& ps, apath)
 	{
+        ++steps;
 //		assert((ps.type != MATCH) && "Incorrect CIGAR type, matches must be converted to SEQ_MATCH/SEQ_MISMATCH");
 		if (ps.type==SEQ_MISMATCH)
 		{
@@ -434,20 +436,51 @@ isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
 		}
 		else
 		{
-			--currentMisMatch;
+            if (currentMisMatch>0) --currentMisMatch;
 		}
+        //std::cout << "currentMisMatch = " << currentMisMatch << std::endl;
 		if (currentMisMatch>maxMismatchNum)
 		{
-			std::cout << "SEMI-ALIGNED" << std::endl;
+			//std::cout << "SEMI-ALIGNED" << std::endl;
 			return true;
 		}
+        if (steps > MAX_STEP) {
+            break;
+        }
+
 	}
-    std::cout << "NOT SEMI-ALIGNED" << std::endl;
+    currentMisMatch=0;
+    steps=0;
+    BOOST_REVERSE_FOREACH(const path_segment& ps, apath)
+	{
+        ++steps;
+//		assert((ps.type != MATCH) && "Incorrect CIGAR type, matches must be converted to SEQ_MATCH/SEQ_MISMATCH");
+		if (ps.type==SEQ_MISMATCH)
+		{
+			++currentMisMatch;
+		}
+		else
+		{
+            if (currentMisMatch>0) --currentMisMatch;
+		}
+        //std::cout << "currentMisMatch = " << currentMisMatch << std::endl;
+		if (currentMisMatch>maxMismatchNum)
+		{
+			//std::cout << "SEMI-ALIGNED" << std::endl;
+			return true;
+		}
+        if (steps > MAX_STEP) {
+            break;
+        }
+
+	}
+    //std::cout << "NOT SEMI-ALIGNED" << std::endl;
     return false;
 }
+*/
 
 // TODO: pass iterator instead of ref substring
-/*bool
+bool
 isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
 		      const std::string& refSeq, const double minSemiAlignedScore)
 {
@@ -456,6 +489,14 @@ isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
 	ALIGNPATH::path_t apath;
     bam_cigar_to_apath(bamRead.raw_cigar(),bamRead.n_cigar(),apath);
 
+    // soft-clipped reads, not looked at here
+    if (refSeq.size() != qrySeq.size()) {
+        std::cout << "Skip because of bad ref length." << std::endl;
+        return false;
+    }
+
+    //std::cout << "qrySeq = " << qrySeq << std::endl;
+    //std::cout << "refSeq = " << refSeq << std::endl;
     apath_add_seqmatch(qrySeq.begin(), qrySeq.end(),
     				   refSeq.begin(), refSeq.end(),
     		           apath);
@@ -474,7 +515,7 @@ isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
         std::cout << "NOT SEMI-ALIGNED" << std::endl;
     }
     return (semiAlignedScore>minSemiAlignedScore);
-}*/
+}
 
 
 

@@ -544,9 +544,6 @@ getJumpAssembly(
     //std::cout << "chrom length=" << chromInfo1.length << " " << chromInfo2.length << std::endl;
 
     getSVReferenceSegments(_opt.referenceFilename, _header, sv, beginPos1, endPos1, beginPos2, endPos2, assemblyData.bp1ref, assemblyData.bp2ref);
-    assemblyData.isBp2AlignedFirst = bporient.isBp2AlignedFirst;
-    assemblyData.isBp1Reversed = bporient.isBp1Reversed;
-    assemblyData.isBp2Reversed = bporient.isBp2Reversed;
 
     // assemble contig spanning the breakend:
     _spanningAssembler.assembleSVBreakends(sv.bp1, sv.bp2, bporient.isBp1Reversed, bporient.isBp2Reversed, assemblyData.contigs, assemblyData.bp1ref.seq(), beginPos1, assemblyData.bp2ref.seq(), beginPos2);
