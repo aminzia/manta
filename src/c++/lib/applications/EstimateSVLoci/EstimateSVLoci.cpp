@@ -105,7 +105,7 @@ runESL(const ESLOptions& opt)
     {
         const input_record_info current(sinput.get_current());
 
-        if       (current.itype != INPUT_TYPE::READ)
+        if (current.itype != INPUT_TYPE::READ)
         {
             log_os << "ERROR: invalid input condition.\n";
             exit(EXIT_FAILURE);
@@ -118,7 +118,8 @@ runESL(const ESLOptions& opt)
         {
             ALIGNPATH::path_t apath;
             bam_cigar_to_apath(read.raw_cigar(), read.n_cigar(), apath);
-            const int alPos(read.pos()-scanRegion.range.begin_pos()); // -1
+            // apparently we need the -1 here
+            const int alPos(read.pos()-scanRegion.range.begin_pos()-1);
             const int alLen(apath_ref_length(apath));
             const int refSize(refSegment.seq().size());
             if (alPos < 0 || (alPos+alLen) > refSize) continue;
