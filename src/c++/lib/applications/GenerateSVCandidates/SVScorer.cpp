@@ -24,13 +24,14 @@
 #include "blt_util/qscore.hh"
 #include "common/Exceptions.hh"
 #include "manta/ReadGroupStatsSet.hh"
+
 #include "boost/foreach.hpp"
 
 #include <algorithm>
 #include <iostream>
 #include <string>
 
-#define DEBUG_SVS
+//#define DEBUG_SVS
 
 #ifdef DEBUG_SVS
 #include "blt_util/log.hh"
@@ -265,9 +266,9 @@ scoreSplitReads(
 
         // align the read to reference regions
         SplitReadAlignment bp1RefSR;
-        bp1RefSR.align(readSeq, qual, svAlignInfo.bp1RefSeq, svAlignInfo.bp1RefOffset);
+        bp1RefSR.align(readSeq, qual, svAlignInfo.bp1ReferenceSeq(), svAlignInfo.bp1RefOffset);
         SplitReadAlignment bp2RefSR;
-        bp2RefSR.align(readSeq, qual, svAlignInfo.bp2RefSeq, svAlignInfo.bp2RefOffset);
+        bp2RefSR.align(readSeq, qual, svAlignInfo.bp2ReferenceSeq(), svAlignInfo.bp2RefOffset);
 
         // scoring
         incrementAlleleEvidence(bp1ContigSR, bp2ContigSR, readMapQ, sample.alt, altBp1ReadSupport, altBp2ReadSupport);
@@ -337,12 +338,7 @@ getSVSplitReadSupport(
     // apply the split-read scoring, only when:
     // 1) the SV is precise, i.e. has successful somatic contigs;
     // 2) the values of max depth are reasonable (otherwise, the read map may blow out).
-    //
-    // consider 2-locus events first
-    // TODO: to add local assembly later
-    //
     const bool isSkipSRSearch(
-        (! assemblyData.isSpanning) ||
         (sv.isImprecise()) ||
         (isSkipSRSearchDepth));
 
@@ -366,6 +362,7 @@ getSVSplitReadSupport(
         bam_streamer& bamStream(*_bamStreams[bamIndex]);
 
         SVEvidence::evidenceTrack_t& sampleEvidence(evidence.getSample(isTumor));
+
         // scoring split reads overlapping bp1
         scoreSplitReads(sv.bp1, SVAlignInfo, minMapQ, sampleEvidence,
                         bamStream, sample);
@@ -522,6 +519,7 @@ scoreSV(
     baseInfo.bp2MaxDepth=(getBreakendMaxMappedDepth(sv.bp2));
 
     /// global evidence accumulator for this SV:
+
     // count the paired-read fragments supporting the ref and alt alleles in each sample:
     //
     getSVPairSupport(svData, sv, baseInfo, evidence);
@@ -689,17 +687,17 @@ scoreDiploidSV(
             // apply maxdepth filter if either of the breakpoints exceeds the maximum depth:
             if (baseInfo.bp1MaxDepth > dFilter.maxDepth(sv.bp1.interval.tid))
             {
-                baseInfo.filters.insert(diploidOpt.maxDepthFilterLabel);
+                diploidInfo.filters.insert(diploidOpt.maxDepthFilterLabel);
             }
             else if (baseInfo.bp2MaxDepth > dFilter.maxDepth(sv.bp2.interval.tid))
             {
-                baseInfo.filters.insert(diploidOpt.maxDepthFilterLabel);
+                diploidInfo.filters.insert(diploidOpt.maxDepthFilterLabel);
             }
         }
 
         if ( diploidInfo.gtScore < diploidOpt.minGTScoreFilter)
         {
-            baseInfo.filters.insert(diploidOpt.minGTFilterLabel);
+            diploidInfo.filters.insert(diploidOpt.minGTFilterLabel);
         }
     }
 }
@@ -787,11 +785,11 @@ scoreSomaticSV(
             // apply maxdepth filter if either of the breakpoints exceeds the maximum depth:
             if (baseInfo.bp1MaxDepth > dFilter.maxDepth(sv.bp1.interval.tid))
             {
-                baseInfo.filters.insert(somaticOpt.maxDepthFilterLabel);
+                somaticInfo.filters.insert(somaticOpt.maxDepthFilterLabel);
             }
             else if (baseInfo.bp2MaxDepth > dFilter.maxDepth(sv.bp2.interval.tid))
             {
-                baseInfo.filters.insert(somaticOpt.maxDepthFilterLabel);
+                somaticInfo.filters.insert(somaticOpt.maxDepthFilterLabel);
             }
         }
     }

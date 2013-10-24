@@ -1,3 +1,11 @@
+- MANTA-20 include split read counts for short reads
+- MANTA-20 account for breakpoint microhomology during split read scoring
+- MANTA-44 Fix Rhodobacter analysis
+v0.11
+- Adjust all vcf output to pass vcf-validator
+- MANTA-20 fix split read breakpoint location
+v0.10.1
+- Fix low-frequency assertion due to unexpected alignment pattern
 v0.10
 - MANTA-20 Limit split read counts to those uniquely supporting each allele,
 where P(allele|read)>0.999

@@ -28,7 +28,7 @@ enable_testing()
 # setup project/version
 #
 
-project (MANTA)
+project (manta)
 set(MANTA_PROJECT_NAME "manta")
 
 # find interpreters
@@ -63,9 +63,18 @@ message (STATUS "BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 #
 if (CPACK_GENERATOR)
     message (STATUS "Configuring to produce the following package types: ${CPACK_GENERATOR}")
-    SET(CPACK_PACKAGE_VENDOR "Illumina")
-    SET(CPACK_PACKAGE_VERSION "${MANTA_VERSION}")
-    SET(CPACK_SET_DESTDIR ON)
+    set(CPACK_PACKAGE_VENDOR "Illumina")
+    set(CPACK_PACKAGE_VERSION "${MANTA_VERSION}")
+    set(CPAKC_PACKAGE_CONTACT "csaunders@illumina.com")
+
+    if (CPACK_GENERATOR STREQUAL "RPM")
+        set(CPACK_RPM_PACKAGE_RELOCATABLE TRUE)
+        set(CPACK_RPM_PACKAGE_LICENSE "Illumina Open Source Software License 1")
+        set(CPACK_RPM_PACKAGE_REQUIRES "python >= 2.4.0")
+    else ()
+        set(CPACK_SET_DESTDIR ON)
+    endif ()
+
     INCLUDE(CPack)
 endif ()
 
@@ -99,7 +108,6 @@ set(MANTA_LIBEXECDIR "${MANTA_EXEC_PREFIX}/libexec")
 # paths w/o architecture dependency
 set(MANTA_PYTHON_LIBDIR "${CMAKE_INSTALL_PREFIX}/lib/python")
 set(MANTA_DATADIR "${CMAKE_INSTALL_PREFIX}/share")
-set(MANTA_ETCDIR "${CMAKE_INSTALL_PREFIX}/etc")
 set(MANTA_DOCDIR "${CMAKE_INSTALL_PREFIX}/doc")
 
 message (STATUS "install prefix: ${CMAKE_INSTALL_PREFIX}")

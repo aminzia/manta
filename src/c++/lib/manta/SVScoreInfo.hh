@@ -19,11 +19,9 @@
 
 #include "manta/SVCandidateAssemblyData.hh"
 #include "manta/SVCandidate.hh"
-#include "blt_util/ReadKey.hh"
 
 #include <iosfwd>
 #include <string>
-#include <set>
 
 
 struct SVAlignmentInfo
@@ -35,13 +33,25 @@ struct SVAlignmentInfo
     const std::string&
     bp1ContigSeq() const
     {
-        return (bp1ContigReversed ? revContigSeq : contigSeq);
+        return (_bp1ContigReversed ? revContigSeq : contigSeq);
     }
 
     const std::string&
     bp2ContigSeq() const
     {
-        return (bp2ContigReversed ? revContigSeq : contigSeq);
+        return (_bp2ContigReversed ? revContigSeq : contigSeq);
+    }
+
+    const std::string&
+    bp1ReferenceSeq() const
+    {
+        return bp1RefSeq;
+    }
+
+    const std::string&
+    bp2ReferenceSeq() const
+    {
+        return (_isSpanning ? bp2RefSeq : bp1RefSeq);
     }
 
     friend
@@ -51,17 +61,17 @@ struct SVAlignmentInfo
 private:
     std::string contigSeq;
     std::string revContigSeq;
-public:
     std::string bp1RefSeq;
     std::string bp2RefSeq;
+    const bool _isSpanning;
+    const bool _bp1ContigReversed;
+    const bool _bp2ContigReversed;
+
+public:
     unsigned bp1ContigOffset;
     unsigned bp2ContigOffset;
-private:
-    bool bp1ContigReversed;
-    bool bp2ContigReversed;
-public:
-    pos_t bp1RefOffset;
-    pos_t bp2RefOffset;
+    unsigned bp1RefOffset;
+    unsigned bp2RefOffset;
 };
 
 std::ostream&
@@ -112,6 +122,7 @@ std::ostream&
 operator<<(std::ostream& os, const SVSampleAlleleInfo& si);
 
 
+
 /// sample-specific evidence info
 struct SVSampleInfo
 {
@@ -144,7 +155,6 @@ struct SVScoreInfo
     {
         normal.clear();
         tumor.clear();
-        filters.clear();
 
         bp1MaxDepth=0;
         bp2MaxDepth=0;
@@ -152,8 +162,6 @@ struct SVScoreInfo
 
     SVSampleInfo normal;
     SVSampleInfo tumor;
-
-    std::set<std::string> filters;
 
     unsigned bp1MaxDepth;
     unsigned bp2MaxDepth;
