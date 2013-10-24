@@ -253,6 +253,9 @@ scoreSplitReads(
         /// bp2 makes is where in the bam we look for reads, therefore if we see split evaluation for bp1 or bp2, we can skip this read:
         if (altBp1ReadSupport.isSplitEvaluated) continue;
 
+        if (readSeq.size() != svAlignInfo.bp1ContigSeq().size()) continue;
+        if (readSeq.size() != svAlignInfo.bp2ContigSeq().size()) continue;
+
         altBp1ReadSupport.isSplitEvaluated = true;
         refBp1ReadSupport.isSplitEvaluated = true;
         altBp2ReadSupport.isSplitEvaluated = true;
