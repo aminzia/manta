@@ -203,7 +203,7 @@ isRefRegionOverlap(
     GenomeInterval bp2RefInterval;
     getBpReferenceInterval(header,extraRefEdgeSize,sv.bp1.interval,bp1RefInterval);
     getBpReferenceInterval(header,extraRefEdgeSize,sv.bp2.interval,bp2RefInterval);
- 
+
     return (bp1RefInterval.isIntersect(bp2RefInterval));
 }
 

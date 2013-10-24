@@ -72,7 +72,7 @@ getSemiAlignedMetricImpl(
         {
             assert((posInRead+ps.length) <= readLen);
             for (unsigned j(0); j<ps.length; ++j)
-            {   
+            {
                 /*int q = int(qual[posInRead+j]);
                 if (q==0) {
                     std::cout << "qual " << int(qual[posInRead+j]) << std::endl;

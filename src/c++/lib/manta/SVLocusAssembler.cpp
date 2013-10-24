@@ -124,7 +124,7 @@ getBreakendReads(
         unsigned int shadowCnt(0);
 #ifdef DEBUG_ASBL
         unsigned int semiAlignedCnt(0);
-#endif 
+#endif
 
         while (bamStream.next() && (reads.size() < MAX_NUM_READS))
         {
@@ -193,19 +193,19 @@ getBreakendReads(
 
             bool isSemiAlignedKeeper(false);
             {
-            	const std::string qry(bamRead.get_bam_read().get_string());
-            	const int alPos(bamRead.pos()-bkptOffset-1);
-            	const int alLen(apath_ref_length(apath));
+                const std::string qry(bamRead.get_bam_read().get_string());
+                const int alPos(bamRead.pos()-bkptOffset-1);
+                const int alLen(apath_ref_length(apath));
                 const int refSize = bkptRef.size();
-                if (alPos > 0 && (alPos+alLen) < refSize) 
+                if (alPos > 0 && (alPos+alLen) < refSize)
                 {
-            	    const std::string ref(bkptRef.substr((alPos-1),alLen));
+                    const std::string ref(bkptRef.substr((alPos-1),alLen));
                     if (isSemiAligned(bamRead,qry,ref,_scanOpt.minSemiAlignedScoreCandidates))
                     {
                         isSemiAlignedKeeper = true;
 #ifdef DEBUG_ASBL
                         ++semiAlignedCnt;
-#endif 
+#endif
                     }
                 }
             }
