@@ -256,6 +256,23 @@ scoreSplitReads(
         if (readSeq.size() != svAlignInfo.bp1ContigSeq().size()) continue;
         if (readSeq.size() != svAlignInfo.bp2ContigSeq().size()) continue;
 
+        /*if (readSeq.size() != svAlignInfo.bp1ContigSeq().size()) {
+            std::cout << "skipping bp1" << std::endl;
+            std::cout << bamRead.qname() << std::endl;
+            ALIGNPATH::path_t apath;
+            bam_cigar_to_apath(bamRead.raw_cigar(),bamRead.n_cigar(),apath);
+            std::cout << apath << std::endl;
+            continue;
+        }
+        if (readSeq.size() != svAlignInfo.bp2ContigSeq().size()) {
+            std::cout << "skipping bp2" << std::endl;
+            std::cout << bamRead.qname() << std::endl;
+            ALIGNPATH::path_t apath;
+            bam_cigar_to_apath(bamRead.raw_cigar(),bamRead.n_cigar(),apath);
+            std::cout << apath << std::endl;
+            continue;
+        }*/
+
         altBp1ReadSupport.isSplitEvaluated = true;
         refBp1ReadSupport.isSplitEvaluated = true;
         altBp2ReadSupport.isSplitEvaluated = true;

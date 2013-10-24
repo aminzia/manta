@@ -66,7 +66,7 @@ getBreakendReads(
     known_pos_range2 searchRange;
     {
         // ideally this should be dependent on the insert size dist
-        static const size_t minIntervalSize(400);
+        static const size_t minIntervalSize(200);
         if (bp.interval.range.size() >= minIntervalSize)
         {
             searchRange = bp.interval.range;
@@ -187,14 +187,11 @@ getBreakendReads(
                 }
             }
 
-#ifdef DEBUG_ASBL
-            log_os << " cigar: " << apath << " isClipKeeper: " << isClipKeeper << " isIndelKeeper: " << isIndelKeeper << "\n";
-#endif
 
             bool isSemiAlignedKeeper(false);
             {
                 const std::string qry(bamRead.get_bam_read().get_string());
-                const int alPos(bamRead.pos()-bkptOffset-1);
+                const int alPos(bamRead.pos()-bkptOffset); // -1 ?
                 const int alLen(apath_ref_length(apath));
                 const int refSize = bkptRef.size();
                 if (alPos > 0 && (alPos+alLen) < refSize)
@@ -224,6 +221,7 @@ getBreakendReads(
                 }
             }
 
+
             lastMapq  = bamRead.map_qual();
             lastQname = bamRead.qname();
             isLastSet = true;
@@ -240,6 +238,8 @@ getBreakendReads(
 #ifdef DEBUG_ASBL
             log_os << logtag << " Adding " << readKey << " " << apath << " " << bamRead.pe_map_qual() << " " << bamRead.pos() << "\n"
                    << bamRead.get_bam_read().get_string() << "\n";
+            log_os << " cigar: " << apath << " isClipKeeper: " << isClipKeeper << " isIndelKeeper: " << isIndelKeeper;
+            log_os << " isSemiAlignedKeeper: " << isSemiAlignedKeeper << " isShadowKeeper: " << isShadowKeeper << "\n";
 #endif
 
             if (readIndex.count(readKey) == 0)

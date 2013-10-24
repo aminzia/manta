@@ -118,7 +118,7 @@ runESL(const ESLOptions& opt)
         {
             ALIGNPATH::path_t apath;
             bam_cigar_to_apath(read.raw_cigar(), read.n_cigar(), apath);
-            const int alPos(read.pos()-scanRegion.range.begin_pos()-1);
+            const int alPos(read.pos()-scanRegion.range.begin_pos()); // -1
             const int alLen(apath_ref_length(apath));
             const int refSize(refSegment.seq().size());
             if (alPos < 0 || (alPos+alLen) > refSize) continue;
