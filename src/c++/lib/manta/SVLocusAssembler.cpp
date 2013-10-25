@@ -190,20 +190,38 @@ getBreakendReads(
 
             bool isSemiAlignedKeeper(false);
             {
-                const std::string qry(bamRead.get_bam_read().get_string());
+                //const std::string qry(bamRead.get_bam_read().get_string());
                 const int alPos(bamRead.pos()-bkptOffset); // -1 ?
                 const int alLen(apath_ref_length(apath));
                 const int refSize = bkptRef.size();
                 if (alPos > 0 && (alPos+alLen) < refSize)
                 {
                     const std::string ref(bkptRef.substr((alPos-1),alLen));
-                    if (isSemiAligned(bamRead,qry,ref,_scanOpt.minSemiAlignedScoreCandidates))
+
+                    static const unsigned minMismatchLen(4);
+
+                    unsigned leadingMismatchLen(0);
+                    unsigned trailingMismatchLen(0);
+                    getSVBreakendCandidateSemiAligned(bamRead, ref, leadingMismatchLen, trailingMismatchLen);
+
+                    if (isSearchForRightOpen)
+                    {
+                    	if (trailingMismatchLen >= minMismatchLen) isSemiAlignedKeeper = true;
+                    }
+
+					if (isSearchForLeftOpen)
+					{
+						if (leadingMismatchLen >= minMismatchLen) isSemiAlignedKeeper = true;
+					}
+
+/*                    if (isSemiAligned(bamRead,qry,ref,_scanOpt.minSemiAlignedScoreCandidates))
                     {
                         isSemiAlignedKeeper = true;
 #ifdef DEBUG_ASBL
                         ++semiAlignedCnt;
 #endif
                     }
+                    */
                 }
             }
 

@@ -63,6 +63,20 @@ getSVBreakendCandidateClip(
     const uint8_t minQ = 20,
     const float minQFrac = 0.75);
 
+/// analogous to soft-clipping but checks for high-quality mismatches
+///
+/// \param[in] minQ
+/// \param[in] minQFrac this fraction of bases must have qual>=minQ within the clipped region
+///
+void
+getSVBreakendCandidateSemiAligned(
+	    const bam_record& bamRead,
+        const std::string& refSeq,
+	    unsigned& leadingMismatchLen,
+	    unsigned& trailingMismatchLen,
+	    const uint8_t minQ = 20,
+	    const float minQFrac = 0.75);
+
 
 /// check bam record for semi-alignedness (number of mismatches/clipped bases weighted by their q-scores)
 bool
