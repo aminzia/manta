@@ -63,10 +63,6 @@ private:
     getLogRatio(const int qual) const
     {
         qphred_cache::qscore_check(qual, "basecall quality");
-        if (qual == 0)
-        {
-            std::cout << "getLogRatio " << qual << std::endl;
-        }
         return _logpcorrectratio[qual];
     }
 

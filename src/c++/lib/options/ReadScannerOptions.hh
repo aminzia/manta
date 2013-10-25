@@ -35,7 +35,7 @@ struct ReadScannerOptions
         // and might need some fine-tuning
         minSemiAlignedScoreGraph(120.0),
         minSemiAlignedScoreCandidates(100.0),
-        minSingletonMapqGraph(40),
+        minSingletonMapqGraph(30),
         minSingletonMapqCandidates(20)
     {}
 
