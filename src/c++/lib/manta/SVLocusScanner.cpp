@@ -865,6 +865,11 @@ getReadBreakendsImpl(
 {
     using namespace illumina::common;
 
+#ifdef DEBUG_SCANNER
+    static const std::string logtag("getReadBreakendsImpl");
+    log_os << logtag << " post-indels candidate_size: " << candidates.size() << "\n";
+#endif
+
     /// TODO: can't handle these yet, but plan to soon:
     //if (localRead.is_mate_unmapped()) return;
 
@@ -1155,6 +1160,8 @@ isProperPair(
     const Range& ppr(_stats[defaultReadGroupIndex].properPair);
     const int32_t fragmentSize(std::abs(bamRead.template_size()));
 
+    if (has_large_gap(bamRead)) return false;
+
     /// we're seeing way to much large fragment garbage in cancers to use the normal proper pair criteria, push the max fragment size out a bit for now:
     static const float maxAnomFactor(1.5);
     if ((fragmentSize > static_cast<int32_t>(maxAnomFactor*ppr.max)) || (fragmentSize < ppr.min)) return false;
@@ -1209,7 +1216,6 @@ isLocalAssemblyEvidence(
     // soft-clipping:
     //
     {
-
         unsigned leadingClipLen(0), trailingClipLen(0);
         getSVBreakendCandidateClip(bamRead, bamAlign.path, leadingClipLen, trailingClipLen);
 
