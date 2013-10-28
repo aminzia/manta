@@ -31,6 +31,7 @@ struct ReadScannerOptions
         maxSplitBreakendSize(100),
         minSplitBreakendSize(10),
         minSoftClipLen(8),
+        minSemiAlignedMismatchLen(4),
         // These numbers are based on checking a few dozens reads
         // and might need some fine-tuning
         minSemiAlignedScoreGraph(120.0),
@@ -71,6 +72,9 @@ struct ReadScannerOptions
 
     // Soft clipped read ends must be of at least this length to be entered as small SV evidence
     unsigned minSoftClipLen;
+
+    // Semi-aligned reads need to have at least this number of mismatches to be entered as small SV evidence
+    unsigned minSemiAlignedMismatchLen;
 
     // Accept semi-aligned reads with at least this hypothesis score, different for graph and candidate generation
     double minSemiAlignedScoreGraph;

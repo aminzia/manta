@@ -451,7 +451,7 @@ getSVBreakendCandidateSemiAligned(
         unsigned minQCount(0);
         for (unsigned pos(0); pos<trailingMismatchLenTmp; ++pos)
         {
-            if (qual[readSize-pos-1] >= minQ) minQCount++;
+            if (qual[readSize-pos-1] >= minQ) ++minQCount;
         }
         if ((static_cast<float>(minQCount)/trailingMismatchLenTmp) >= minQFrac)
         {
@@ -466,7 +466,7 @@ getSVBreakendCandidateSemiAligned(
         unsigned minQCount(0);
         for (unsigned pos(0); pos<leadingMismatchLenTmp; ++pos)
         {
-            if (qual[pos] >= minQ) minQCount++;
+            if (qual[pos] >= minQ) ++minQCount;
         }
         if ((static_cast<float>(minQCount)/leadingMismatchLenTmp) >= minQFrac)
         {
@@ -584,13 +584,13 @@ getSVCandidatesFromSemiAligned(
     // soft-clipped reads don't define a full hypothesis, so they're always evidence for a 'complex' ie. undefined, event:
     static const bool isComplex(true);
 
-    if (leadingMismatchLen >= opt.minSoftClipLen)
+    if (leadingMismatchLen >= opt.minSemiAlignedMismatchLen)
     {
         const pos_t clipPos(bamAlign.pos);
         candidates.push_back(GetSplitSVCandidate(opt,bamRead.target_id(),clipPos,clipPos,isComplex));
     }
 
-    if (trailingMismatchLen >= opt.minSoftClipLen)
+    if (trailingMismatchLen >= opt.minSemiAlignedMismatchLen)
     {
         const pos_t clipPos(bamAlign.pos + apath_ref_length(bamAlign.path));
         candidates.push_back(GetSplitSVCandidate(opt,bamRead.target_id(),clipPos,clipPos,isComplex));
@@ -1207,9 +1207,8 @@ isLocalAssemblyEvidence(
         //bam_cigar_to_apath(bamRead.raw_cigar(), bamRead.n_cigar(), apath);
         unsigned leadingMismatchLen(0), trailingMismatchLen(0);
         getSVBreakendCandidateSemiAligned(bamRead, bkptRef, leadingMismatchLen, trailingMismatchLen);
-        if ((leadingMismatchLen >= _opt.minSoftClipLen) || (trailingMismatchLen >= _opt.minSoftClipLen)) return true;
+        if ((leadingMismatchLen >= _opt.minSemiAlignedMismatchLen) || (trailingMismatchLen >= _opt.minSemiAlignedMismatchLen)) return true;
         //if (isSemiAligned(bamRead,qry,bkptRef,_opt.minSemiAlignedScoreGraph)) return true;
-
     }
 
     const SimpleAlignment bamAlign(bamRead);
@@ -1230,7 +1229,6 @@ isLocalAssemblyEvidence(
     {
         unsigned leadingClipLen(0), trailingClipLen(0);
         getSVBreakendCandidateClip(bamRead, bamAlign.path, leadingClipLen, trailingClipLen);
-
         if ((leadingClipLen >= _opt.minSoftClipLen) || (trailingClipLen >= _opt.minSoftClipLen)) return true;
     }
 
