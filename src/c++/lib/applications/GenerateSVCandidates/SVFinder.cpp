@@ -492,6 +492,8 @@ getCandidatesFromData(
                 }
             }
             const bam_record* remoteBamRecPtr( remoteReadPtr->isSet() ? &(remoteReadPtr->bamrec) : NULL);
+
+            readCandidates.clear();
             _readScanner.getBreakendPair(localReadPtr->bamrec, remoteBamRecPtr, bamIndex, chromToIndex, "NA",readCandidates);
 
 #ifdef DEBUG_SVDATA
