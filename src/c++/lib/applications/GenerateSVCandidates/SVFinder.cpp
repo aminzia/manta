@@ -69,6 +69,7 @@ addSVNodeRead(
     const bam_record& bamRead,
     const unsigned bamIndex,
     const bool isExpectRepeat,
+    const std::string& bkptRef,
     SVCandidateSetReadPairSampleGroup& svDataGroup)
 {
     if (scanner.isReadFiltered(bamRead)) return;
@@ -91,7 +92,7 @@ addSVNodeRead(
 
     // finally, check to see if the svDataGroup is full... for now, we allow a very large
     // number of reads to be stored in the hope that we never reach this limit, but just in
-    // case we don't want to exaust memory in centromere pileups, etc...
+    // case we don't want to exhaust memory in centromere pileups, etc...
     static const unsigned maxDataSize(2000);
     if (svDataGroup.size() >= maxDataSize)
     {
@@ -104,7 +105,7 @@ addSVNodeRead(
 
     typedef std::vector<SVLocus> loci_t;
     loci_t loci;
-    scanner.getSVLoci(bamRead,bamIndex,"NA",false,chromToIndex,loci);
+    scanner.getSVLoci(bamRead,bamIndex,bkptRef,chromToIndex,loci);
 
     BOOST_FOREACH(const SVLocus& locus, loci)
     {
@@ -138,6 +139,7 @@ addSVNodeData(
     const SVLocus& locus,
     const NodeIndexType localNodeIndex,
     const NodeIndexType remoteNodeIndex,
+    const std::string& referenceFilename,
     SVCandidateSetData& svData)
 {
     // get full search interval:
@@ -151,8 +153,8 @@ addSVNodeData(
 
     /// This is a temporary measure to make the qname collision detection much looser
     /// problems have come up where very large deletions are present in a read, and it is therefore
-    /// detected as a repreat in two differnt regions, even though they are separated by a considerable
-    /// distance. Solution is temporaryily turn off collision detection whenever two regions are on
+    /// detected as a repeat in two different regions, even though they are separated by a considerable
+    /// distance. Solution is temporarily turn off collision detection whenever two regions are on
     /// the same chrom (ie. almost always)
     ///
     /// TODO: restore more precise collision detection
@@ -172,9 +174,14 @@ addSVNodeData(
     {
         SVCandidateSetReadPairSampleGroup& svDataGroup(svData.getDataGroup(bamIndex));
         bam_streamer& read_stream(*bamPtr);
+        const bam_header_t& header(*(bamPtr->get_header()));
+        const bam_header_info bamHeader(header);
 
         // set bam stream to new search interval:
         read_stream.set_new_region(searchInterval.tid,searchInterval.range.begin_pos(),searchInterval.range.end_pos());
+
+        reference_contig_segment refSegment;
+        getIntervalReferenceSegment(referenceFilename,bamHeader,searchInterval,refSegment);
 
 #ifdef DEBUG_SVDATA
         log_os << "addSVNodeData: scanning bamIndex: " << bamIndex << "\n";
@@ -182,11 +189,22 @@ addSVNodeData(
         while (read_stream.next())
         {
             const bam_record& bamRead(*(read_stream.get_record_ptr()));
+            std::string ref;
+            {
+                ALIGNPATH::path_t apath;
+                bam_cigar_to_apath(bamRead.raw_cigar(), bamRead.n_cigar(), apath);
+                // apparently we need the -1 here
+                const int alPos(bamRead.pos()-searchInterval.range.begin_pos()-1);
+                const int alLen(apath_ref_length(apath));
+                const int refSize(refSegment.seq().size());
+                if (alPos < 0 || (alPos+alLen) > refSize) continue;
+                ref = refSegment.seq().substr(alPos,alLen);
+            }
 
             // test if read supports an SV on this edge, if so, add to SVData
-            addSVNodeRead(chromToIndex,_readScanner,localNode,remoteNode,bamRead, bamIndex,isExpectRepeat,svDataGroup);
+            addSVNodeRead(chromToIndex,_readScanner,localNode,remoteNode,bamRead, bamIndex,isExpectRepeat,ref,svDataGroup);
         }
-        bamIndex++;
+        ++bamIndex;
     }
 }
 
@@ -204,7 +222,7 @@ checkResult(
     const unsigned svCount(svs.size());
     if (0 == svCount) return;
 
-    // check that the counts totalled up from the data match those in the sv candidates
+    // check that the counts totaled up from the data match those in the sv candidates
     std::map<unsigned,unsigned> readCounts;
     std::map<unsigned,unsigned> pairCounts;
 
@@ -220,27 +238,31 @@ checkResult(
         const SVCandidateSetReadPairSampleGroup& svDataGroup(svData.getDataGroup(bamIndex));
         BOOST_FOREACH(const SVCandidateSetReadPair& pair, svDataGroup)
         {
-            BOOST_FOREACH(const SVCandidateSetReadPair::index_t svIndex, pair.svIndex)
+            BOOST_FOREACH(const SVPairAssociation& sva, pair.svLink)
             {
-                if (svIndex>=svCount)
+
+                if (sva.index>=svCount)
                 {
                     std::ostringstream oss;
-                    oss << "Searching for SVIndex: " << svIndex << " with svSize: " << svCount << "\n";
+                    oss << "Searching for SVIndex: " << sva.index << " with svSize: " << svCount << "\n";
                     BOOST_THROW_EXCEPTION(LogicException(oss.str()));
                 }
 
-                if (pair.read1.isSet()) readCounts[svIndex]++;
-                if (pair.read2.isSet()) readCounts[svIndex]++;
-                if (pair.read1.isSet() && pair.read2.isSet()) pairCounts[svIndex] += 2;
+                if (SVEvidenceType::isPairType(sva.evtype))
+                {
+                    if (pair.read1.isSet()) readCounts[sva.index]++;
+                    if (pair.read2.isSet()) readCounts[sva.index]++;
+                    if (pair.read1.isSet() && pair.read2.isSet()) pairCounts[sva.index] += 2;
+                }
             }
         }
     }
 
     for (unsigned svIndex(0); svIndex<svCount; ++svIndex)
     {
-        const unsigned svObsReadCount(svs[svIndex].bp1.readCount + svs[svIndex].bp2.readCount);
-        const unsigned svObsPairCount(svs[svIndex].bp1.pairCount + svs[svIndex].bp2.pairCount);
-        assert(svs[svIndex].bp1.pairCount == svs[svIndex].bp2.pairCount);
+        const unsigned svObsReadCount(svs[svIndex].bp1.getLocalPairCount() + svs[svIndex].bp2.getLocalPairCount());
+        const unsigned svObsPairCount(svs[svIndex].bp1.getPairCount() + svs[svIndex].bp2.getPairCount());
+        assert(svs[svIndex].bp1.getPairCount() == svs[svIndex].bp2.getPairCount());
 
         const unsigned dataObsReadCount(readCounts[svIndex]);
         const unsigned dataObsPairCount(pairCounts[svIndex]);
@@ -271,6 +293,57 @@ checkResult(
 
 
 
+typedef std::map<unsigned,unsigned> movemap_t;
+
+
+
+/// local convenience struct, if only I had closures instead... :<
+struct svCandDeleter
+{
+    svCandDeleter(
+        std::vector<SVCandidate>& svs,
+        movemap_t& moveSVIndex) :
+        _shift(0),
+        _isLastIndex(false),
+        _lastIndex(0),
+        _svs(svs),
+        _moveSVIndex(moveSVIndex)
+    {}
+
+    void
+    deleteIndex(
+        const unsigned index)
+    {
+        assert(index <= _svs.size());
+
+        if (_isLastIndex)
+        {
+            for (unsigned i(_lastIndex+1); i<index; ++i)
+            {
+                assert(_shift>0);
+                assert(i>=_shift);
+
+                _svs[(i-_shift)] = _svs[i];
+                // moveSVIndex has already been set for deleted indices, this sets
+                // the move for non-deleted positions:
+                _moveSVIndex[i] = (i-_shift);
+            }
+        }
+        _lastIndex=index;
+        _isLastIndex=true;
+        _shift++;
+    }
+
+private:
+    unsigned _shift;
+    bool _isLastIndex;
+    unsigned _lastIndex;
+    std::vector<SVCandidate>& _svs;
+    movemap_t& _moveSVIndex;
+};
+
+
+
 // check whether any svs have grown to intersect each other
 //
 // this is also part of the temp hygen hack, so just make this minimally work:
@@ -282,22 +355,33 @@ consolidateOverlap(
     SVCandidateSetData& svData,
     std::vector<SVCandidate>& svs)
 {
-    typedef std::map<unsigned,unsigned> movemap_t;
+#ifdef DEBUG_SVDATA
+    static const std::string logtag("consolidateOverlap: ");
+#endif
+
     movemap_t moveSVIndex;
     std::set<unsigned> deletedSVIndex;
+
+    std::vector<unsigned> innerIndexShift;
 
     const unsigned svCount(svs.size());
     for (unsigned outerIndex(1); outerIndex<svCount; ++outerIndex)
     {
+        const unsigned prevInnerIndexShift( (outerIndex<=1) ? 0 : innerIndexShift[outerIndex-2]);
+        innerIndexShift.push_back(prevInnerIndexShift + deletedSVIndex.count(outerIndex-1));
         for (unsigned innerIndex(0); innerIndex<outerIndex; ++innerIndex)
         {
+            if (deletedSVIndex.count(innerIndex)) continue;
+
             if (svs[innerIndex].isIntersect(svs[outerIndex]))
             {
 #ifdef DEBUG_SVDATA
-                log_os << "Merging outer:inner: " << outerIndex << " " << innerIndex << "\n";
+                log_os << logtag << "Merging outer:inner: " << outerIndex << " " << innerIndex << "\n";
 #endif
                 svs[innerIndex].merge(svs[outerIndex]);
-                moveSVIndex[outerIndex] = (innerIndex - deletedSVIndex.size());
+                assert(innerIndexShift.size() > innerIndex);
+                assert(innerIndexShift[innerIndex] <= innerIndex);
+                moveSVIndex[outerIndex] = (innerIndex - innerIndexShift[innerIndex]);
                 deletedSVIndex.insert(outerIndex);
                 break;
             }
@@ -309,40 +393,18 @@ consolidateOverlap(
 #ifdef DEBUG_SVDATA
         BOOST_FOREACH(const unsigned index, deletedSVIndex)
         {
-            log_os << "deleted index: " << index << "\n";
+            log_os << logtag << "deleted index: " << index << "\n";
         }
 #endif
 
         {
-            unsigned shift(0);
-            bool isLastIndex(false);
-            unsigned lastIndex(0);
+            svCandDeleter svDeleter(svs,moveSVIndex);
+
             BOOST_FOREACH(const unsigned index, deletedSVIndex)
             {
-                if (isLastIndex)
-                {
-                    for (unsigned i(lastIndex+1); i<index; ++i)
-                    {
-                        assert(shift>0);
-                        assert(i>=shift);
-                        moveSVIndex[i] = (i-shift);
-                        svs[(i-shift)] = svs[i];
-                    }
-                }
-                lastIndex=index;
-                isLastIndex=true;
-                shift++;
+                svDeleter.deleteIndex(index);
             }
-            if (isLastIndex)
-            {
-                for (unsigned i(lastIndex+1); i<svCount; ++i)
-                {
-                    assert(shift>0);
-                    assert(i>=shift);
-                    moveSVIndex[i] = (i-shift);
-                    svs[(i-shift)] = svs[i];
-                }
-            }
+            svDeleter.deleteIndex(svCount);
         }
 
         svs.resize(svs.size()-deletedSVIndex.size());
@@ -359,7 +421,7 @@ consolidateOverlap(
 #ifdef DEBUG_SVDATA
         BOOST_FOREACH(const movemap_t::value_type& val, moveSVIndex)
         {
-            log_os << "Movemap from: " << val.first << " to: " << val.second << "\n";
+            log_os << logtag << "Movemap from: " << val.first << " to: " << val.second << "\n";
         }
 #endif
 
@@ -368,17 +430,16 @@ consolidateOverlap(
             SVCandidateSetReadPairSampleGroup& svDataGroup(svData.getDataGroup(bamIndex));
             BOOST_FOREACH(SVCandidateSetReadPair& pair, svDataGroup)
             {
-                BOOST_FOREACH(SVCandidateSetReadPair::index_t& svIndex, pair.svIndex)
+                BOOST_FOREACH(SVPairAssociation& sva, pair.svLink)
                 {
-                    if (moveSVIndex.count(svIndex))
+                    if (moveSVIndex.count(sva.index))
                     {
-                        svIndex = moveSVIndex[svIndex];
+                        sva.index = moveSVIndex[sva.index];
                     }
                 }
             }
         }
     }
-
 }
 
 
@@ -390,17 +451,33 @@ getCandidatesFromData(
     SVCandidateSetData& svData,
     std::vector<SVCandidate>& svs)
 {
+#ifdef DEBUG_SVDATA
+    static const std::string logtag("getCandidatesFromData: ");
+#endif
+
     std::vector<SVCandidate> readCandidates;
 
     const unsigned bamCount(_bamStreams.size());
-    for (unsigned bamIndex(0); bamIndex < bamCount; ++bamIndex)
+
+    //unsigned bamIndex(0);
+    for (unsigned bamIndex(0);bamIndex<bamCount;++bamIndex)
+    //BOOST_FOREACH(streamPtr& bamPtr, _bamStreams)
     {
         SVCandidateSetReadPairSampleGroup& svDataGroup(svData.getDataGroup(bamIndex));
+
+        // OST: how do I get the reference here??
+        /*bam_streamer& read_stream(*bamPtr);
+        const bam_header_t& header(*(bamPtr->get_header()));
+        const bam_header_info bamHeader(header);
+
+        reference_contig_segment refSegment;
+        getReference(referenceFilename,bamHeader,refSegment);*/
+
         BOOST_FOREACH(SVCandidateSetReadPair& pair, svDataGroup)
         {
             SVCandidateSetRead* localReadPtr(&(pair.read1));
             SVCandidateSetRead* remoteReadPtr(&(pair.read2));
-            pair.svIndex.clear();
+            pair.svLink.clear();
 
             if (isExcludeUnpaired)
             {
@@ -415,21 +492,16 @@ getCandidatesFromData(
                 }
             }
             const bam_record* remoteBamRecPtr( remoteReadPtr->isSet() ? &(remoteReadPtr->bamrec) : NULL);
-
-            readCandidates.clear();
-            _readScanner.getBreakendPair(localReadPtr->bamrec, remoteBamRecPtr, bamIndex, false, chromToIndex, readCandidates);
+            _readScanner.getBreakendPair(localReadPtr->bamrec, remoteBamRecPtr, bamIndex, chromToIndex, "NA",readCandidates);
 
 #ifdef DEBUG_SVDATA
             log_os << "Checking pair: " << pair << "\n";
             log_os << "Translated to candidates:\n";
             BOOST_FOREACH(const SVCandidate& cand, readCandidates)
             {
-                log_os << "\tcand: " << cand << "\n";
+                log_os << logtag << "cand: " << cand << "\n";
             }
 #endif
-
-            bool isSVFound(false);
-            unsigned svIndex(0);
 
             // temporary hack hypoth gen method assumes that only one SV exists for each overlapping breakpoint range with
             // the same orientation:
@@ -439,42 +511,62 @@ getCandidatesFromData(
             // this can lead to an infinite loop.
             BOOST_FOREACH(const SVCandidate& readCand, readCandidates)
             {
+#ifdef DEBUG_SVDATA
+                log_os << logtag << "Starting assignment for read cand: " << readCand << "\n";
+#endif
+                bool isSVFound(false);
+                unsigned svIndex(0);
+
                 BOOST_FOREACH(SVCandidate& sv, svs)
                 {
                     if (sv.isIntersect(readCand))
                     {
 #ifdef DEBUG_SVDATA
-                        log_os << "Adding to svIndex: " << svIndex << "\n";
+                        log_os << logtag << "Adding to svIndex: " << svIndex << " match_sv: " << sv << "\n";
 #endif
                         isSVFound=true;
-                        pair.svIndex.push_back(svIndex);
+                        {
+                            using namespace SVEvidenceType;
+
+                            index_t evType(UNKNOWN);
+                            for (int i(0); i<SIZE; ++i)
+                            {
+                                if (readCand.bp1.lowresEvidence.getVal(i) != 0)
+                                {
+                                    evType = static_cast<index_t>(i);
+                                    break;
+                                }
+                            }
+
+                            pair.svLink.push_back(SVPairAssociation(svIndex,evType));
+                        }
                         sv.merge(readCand);
                         break;
                     }
                     svIndex++;
                 }
+
                 if (isSVFound) continue;
-                //if (! isSVFound)
-                {
+
 #ifdef DEBUG_SVDATA
-                    log_os << "New svIndex: " << svs.size() << "\n";
+                log_os << logtag << "New svIndex: " << svs.size() << "\n";
 #endif
-                    pair.svIndex.push_back(svs.size());
-                    svs.push_back(readCand);
-                    svs.back().candidateIndex = pair.svIndex.back();
-                }
+                pair.svLink.push_back(SVPairAssociation(svs.size()));
+                svs.push_back(readCand);
+                svs.back().candidateIndex = pair.svLink.back().index;
             }
         }
+        ++bamIndex;
     }
 
 #ifdef DEBUG_SVDATA
     {
-        log_os << "findSVCandidates: precount: " << svs.size() << "\n";
+        log_os << logtag << "precount: " << svs.size() << "\n";
 
         unsigned svIndex(0);
         BOOST_FOREACH(SVCandidate& sv, svs)
         {
-            log_os << "\tPRECOUNT: index: " << svIndex << " " << sv;
+            log_os << logtag << "PRECOUNT: index: " << svIndex << " " << sv;
             svIndex++;
         }
     }
@@ -484,12 +576,12 @@ getCandidatesFromData(
 
 #ifdef DEBUG_SVDATA
     {
-        log_os << "findSVCandidates: postcount: " << svs.size() << "\n";
+        log_os << logtag << "postcount: " << svs.size() << "\n";
 
         unsigned svIndex(0);
         BOOST_FOREACH(SVCandidate& sv, svs)
         {
-            log_os << "\tPOSTCOUNT: index: " << svIndex << " " << sv;
+            log_os << logtag << "POSTCOUNT: index: " << svIndex << " " << sv;
             svIndex++;
         }
     }
@@ -503,8 +595,10 @@ SVFinder::
 findCandidateSV(
     const std::map<std::string, int32_t>& chromToIndex,
     const EdgeInfo& edge,
+    const std::string& referenceFilename,
     SVCandidateSetData& svData,
-    std::vector<SVCandidate>& svs)
+    std::vector<SVCandidate>& svs
+    )
 {
     svData.clear();
     svs.clear();
@@ -540,7 +634,8 @@ findCandidateSV(
 
         const SVLocusNode& node(locus.getNode(edge.nodeIndex1));
 
-        localBreakend.splitCount = node.getEdge(edge.nodeIndex1).getCount();
+        static const SVEvidenceType::index_t svUnknown(SVEvidenceType::UNKNOWN);
+        localBreakend.lowresEvidence.add(svUnknown, node.getEdge(edge.nodeIndex1).getCount());
         localBreakend.state = SVBreakendState::COMPLEX;
         localBreakend.interval = node.getInterval();
 
@@ -555,6 +650,8 @@ findCandidateSV(
         {
             svData.getDataGroup(bamIndex);
         }
+
+        svData.setSkipped();
 
         return;
     }
@@ -576,18 +673,14 @@ findCandidateSV(
     // come up with an ultra-simple model-free scoring rule: >10 obs = Q60,k else Q0
     //
 
-    addSVNodeData(chromToIndex, locus,edge.nodeIndex1,edge.nodeIndex2,svData);
+    addSVNodeData(chromToIndex, locus,edge.nodeIndex1,edge.nodeIndex2,referenceFilename,svData);
     if (edge.nodeIndex1 != edge.nodeIndex2)
     {
-        addSVNodeData(chromToIndex, locus,edge.nodeIndex2,edge.nodeIndex1,svData);
+        addSVNodeData(chromToIndex, locus,edge.nodeIndex2,edge.nodeIndex1,referenceFilename,svData);
     }
 
     getCandidatesFromData(chromToIndex, svData,svs);
 
-    /*#ifdef DEBUG_SVDATA
-        checkResult(svData,svs);
-    #endif*/
+    //checkResult(svData,svs);
 }
-
-
 

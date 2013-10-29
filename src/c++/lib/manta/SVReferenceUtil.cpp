@@ -123,6 +123,9 @@ getIntervalReferenceSegment(
     }*/
 }
 
+
+
+
 static
 void
 getIntervalReferenceSegmentByPos(
@@ -136,7 +139,6 @@ getIntervalReferenceSegmentByPos(
 {
     GenomeInterval refInterval;
     getBpReferenceIntervalPos(bpInterval, refInterval, beginPos, endPos);
-
     getIntervalReferenceSegment(referenceFilename, header, refInterval, intervalRefSeq);
 }
 

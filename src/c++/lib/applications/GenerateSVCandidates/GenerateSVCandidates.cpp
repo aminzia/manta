@@ -138,7 +138,7 @@ struct SVWriter
         }
         else
         {
-            if (sv.bp1.pairCount < minCandidatePairCount)
+            if (sv.bp1.getPairCount() < minCandidatePairCount)
             {
 #ifdef DEBUG_GSV
                 log_os << logtag << " rejecting candidate: minCandidatePairCount\n";
@@ -295,7 +295,7 @@ runGSC(
         try
         {
             // find number, type and breakend range (or better: breakend distro) of SVs on this edge:
-            svFind.findCandidateSV(chromToIndex, edge, svData, svs);
+            svFind.findCandidateSV(chromToIndex, edge, opt.referenceFilename, svData, svs);
 
             if (opt.isVerbose)
             {

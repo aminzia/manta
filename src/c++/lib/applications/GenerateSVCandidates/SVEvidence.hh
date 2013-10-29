@@ -105,6 +105,14 @@ struct SVFragmentEvidenceAllele
         return (isBp1 ? bp1 : bp2 );
     }
 
+    bool
+    isAnySplitReadSupport(
+        const bool isRead1) const
+    {
+        return (bp1.getRead(isRead1).isSplitSupport ||
+                bp2.getRead(isRead1).isSplitSupport);
+    }
+
     SVFragmentEvidenceAlleleBreakend bp1;
     SVFragmentEvidenceAlleleBreakend bp2;
 };
@@ -121,7 +129,8 @@ struct SVFragmentEvidenceRead
     SVFragmentEvidenceRead() :
         isScanned(false),
         isAnchored(false),
-        mapq(0)
+        mapq(0),
+        size(0)
     {}
 
     bool
@@ -134,6 +143,7 @@ struct SVFragmentEvidenceRead
 
     bool isAnchored; ///< if true, the read is found and known to have a confident mapping wrt fragment support
     unsigned mapq;
+    unsigned size;
 };
 
 std::ostream&
@@ -151,6 +161,31 @@ struct SVFragmentEvidence
     getRead(const bool isRead1)
     {
         return (isRead1 ? read1 : read2);
+    }
+
+    const SVFragmentEvidenceRead&
+    getRead(const bool isRead1) const
+    {
+        return (isRead1 ? read1 : read2);
+    }
+
+    /// does this fragment provide any pair evidence for any allele/bp combination?
+    bool
+    isAnySpanningPairSupport() const
+    {
+        const bool isRefSupport(ref.bp1.isFragmentSupport || ref.bp2.isFragmentSupport);
+        const bool isAltSupport(alt.bp1.isFragmentSupport || alt.bp2.isFragmentSupport);
+
+        return (isRefSupport || isAltSupport);
+    }
+
+    /// does this fragment read provide any split evidence for any allele/bp combination?
+    bool
+    isAnySplitReadSupport(
+        const bool isRead1) const
+    {
+        return (alt.isAnySplitReadSupport(isRead1) ||
+                ref.isAnySplitReadSupport(isRead1));
     }
 
     SVFragmentEvidenceRead read1;
@@ -173,7 +208,6 @@ operator<<(std::ostream& os, const SVFragmentEvidence& sve);
 struct SVEvidence
 {
     typedef std::map<std::string,SVFragmentEvidence> evidenceTrack_t;
-
 
     evidenceTrack_t&
     getSample(

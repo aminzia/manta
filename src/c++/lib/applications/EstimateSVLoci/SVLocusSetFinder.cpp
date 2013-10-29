@@ -212,7 +212,7 @@ update(const bam_record& bamRead,
 
     std::vector<SVLocus> loci;
 
-    _readScanner.getSVLoci(bamRead, defaultReadGroupIndex, bkptRef, true, chromToIndex, loci);
+    _readScanner.getSVLoci(bamRead, defaultReadGroupIndex, bkptRef, chromToIndex, loci);
 
     BOOST_FOREACH(const SVLocus& locus, loci)
     {

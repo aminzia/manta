@@ -173,7 +173,6 @@ struct SVLocusScanner
         const unsigned defaultReadGroupIndex,
         //std::vector<SVLocus>& loci,
         const std::string& bkptRef,
-        const bool retrieveLocalEvidence,
         const std::map<std::string, int32_t>& chromToIndex,
         std::vector<SVLocus>& loci) const;
 
@@ -189,8 +188,8 @@ struct SVLocusScanner
         const bam_record& localRead,
         const bam_record* remoteReadPtr,
         const unsigned defaultReadGroupIndex,
-        const bool retrieveLocalEvidence,
         const std::map<std::string, int32_t>& chromToIndex,
+        const std::string& bkptRef,
         std::vector<SVCandidate>& candidates) const;
 
     /// provide direct access to the frag distro for

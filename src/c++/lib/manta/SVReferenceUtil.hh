@@ -46,6 +46,13 @@ getIntervalReferenceSegment(
     const GenomeInterval& interval,
     reference_contig_segment& intervalRef);
 
+void
+getReference(
+    const std::string& referenceFilename,
+    const bam_header_info& header,
+    const GenomeInterval& interval,
+    reference_contig_segment& intervalRef);
+
 /// extract the reference sequence around each breakend into a reference_contig_segment
 /// object
 ///

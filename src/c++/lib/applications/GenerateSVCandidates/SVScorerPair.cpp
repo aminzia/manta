@@ -29,13 +29,6 @@
 #include <string>
 
 
-//#define DEBUG_SVS
-
-#ifdef DEBUG_SVS
-#include "blt_util/log.hh"
-#endif
-
-
 //#define DEBUG_PAIR
 
 #ifdef DEBUG_PAIR
@@ -311,13 +304,13 @@ struct SpanTerminal
     SpanTerminal() :
         tid(0),
         pos(0),
-        isFwd(true),
+        isFwdStrand(true),
         readSize(0)
     {}
 
     int32_t tid;
     pos_t pos;
-    bool isFwd;
+    bool isFwdStrand;
     unsigned readSize;
 };
 
@@ -327,7 +320,10 @@ static
 std::ostream&
 operator<<(std::ostream& os, const SpanTerminal& st)
 {
-    os << "tid: " << st.tid << " pos: " << st.pos << " isF: " << st.isFwd << " readSize: " << st.readSize;
+    os << "tid: " << st.tid
+       << " pos: "<< st.pos
+       << " isFwdStrand: " << st.isFwdStrand
+       << " readSize: " << st.readSize;
     return os;
 }
 #endif
@@ -341,8 +337,8 @@ getTerminal(
     SpanTerminal& fterm)
 {
     fterm.tid = rinfo.interval.tid;
-    fterm.isFwd = rinfo.isFwdStrand;
-    fterm.pos = ( fterm.isFwd ? rinfo.interval.range.begin_pos() : rinfo.interval.range.end_pos() );
+    fterm.isFwdStrand = rinfo.isFwdStrand;
+    fterm.pos = ( fterm.isFwdStrand ? rinfo.interval.range.begin_pos() : rinfo.interval.range.end_pos() );
     fterm.readSize = rinfo.readSize;
 }
 
@@ -356,6 +352,7 @@ getFragProb(
     const SVCandidate& sv,
     const SVCandidateSetReadPair& pair,
     const SizeDistribution& fragDistro,
+    const bool isStrictMatch,
     bool& isFragSupportSV,
     float& fragProb)
 {
@@ -387,13 +384,16 @@ getFragProb(
     {
         isBpFragReversed=true;
     }
-    else if (frag1.isFwd != (sv.bp1.state == SVBreakendState::RIGHT_OPEN) )
+    else if (frag1.isFwdStrand != (sv.bp1.state == SVBreakendState::RIGHT_OPEN) )
     {
         isBpFragReversed=true;
     }
-    else if ((frag1.pos < frag2.pos) != (bp1pos < bp2pos))
+    else if (frag1.isFwdStrand == frag2.isFwdStrand)
     {
-        isBpFragReversed=true;
+        if ((frag1.pos < frag2.pos) != (bp1pos < bp2pos))
+        {
+            isBpFragReversed=true;
+        }
     }
 
     if (isBpFragReversed)
@@ -430,30 +430,58 @@ getFragProb(
 #endif
 
     // QC the frag/bp matchup:
-    if (frag1.tid != frag2.tid)
     {
-        /// TODO:: we should be able to assert this condition with no return.. there's an occational bad read/sv matchup
-        if (frag1.tid != sv.bp1.interval.tid) return;
-        if (frag2.tid != sv.bp2.interval.tid) return;
-    }
-    else if (frag1.isFwd != frag2.isFwd)
-    {
-        /// TODO:: we should be able to assert this condition with no return.. there's an occational bad read/sv matchup
-        if ( frag1.isFwd != (sv.bp1.state == SVBreakendState::RIGHT_OPEN) ) return;
-        if ( frag2.isFwd != (sv.bp2.state == SVBreakendState::RIGHT_OPEN) ) return;;
-    }
-    else
-    {
-        /// TODO:: we should be able to assert this condition with no return.. there's an occational bad read/sv matchup
-        if ( (frag1.pos < frag2.pos) != (bp1pos < bp2pos) ) return;
-    }
+        std::string errorMsg;
+        if (frag1.tid != frag2.tid)
+        {
+            if (frag1.tid != sv.bp1.interval.tid)
+            {
+                errorMsg = "Can't match evidence read chrom to sv-candidate bp1.";
+            }
+            if (frag2.tid != sv.bp2.interval.tid)
+            {
+                errorMsg = "Can't match evidence read chrom to sv-candidate bp2.";
+            }
+        }
+        else if (frag1.isFwdStrand != frag2.isFwdStrand)
+        {
+            if ( frag1.isFwdStrand != (sv.bp1.state == SVBreakendState::RIGHT_OPEN) )
+            {
+                errorMsg = "Can't match evidence read strand to sv-candidate bp1";
+            }
+            if ( frag2.isFwdStrand != (sv.bp2.state == SVBreakendState::RIGHT_OPEN) )
+            {
+                errorMsg = "Can't match evidence read strand to sv-candidate bp2";
+            }
+        }
+        else
+        {
+            if ( (frag1.pos < frag2.pos) != (bp1pos < bp2pos) )
+            {
+                errorMsg = "Can't match read pair positions to sv-candidate.";
+            }
+        }
 
+        if (! errorMsg.empty())
+        {
+            if (! isStrictMatch) return;
+
+            using namespace illumina::common;
+
+            std::ostringstream oss;
+            oss << "ERROR: " << errorMsg  << "\n"
+                << "\tcandidate-sv: " << sv
+                << "\tread-pair: " << pair
+                << "\n";
+            BOOST_THROW_EXCEPTION(LogicException(oss.str()));
+        }
+    }
 
     pos_t frag1Size(bp1pos-frag1.pos);
-    if (! frag1.isFwd) frag1Size *= -1;
+    if (! frag1.isFwdStrand) frag1Size *= -1;
 
     pos_t frag2Size(bp2pos-frag2.pos);
-    if (! frag2.isFwd) frag2Size *= -1;
+    if (! frag2.isFwdStrand) frag2Size *= -1;
 
 #ifdef DEBUG_PAIR
     log_os << logtag << "frag1size,frag2size: " << frag1Size << " " << frag2Size << "\n";
@@ -463,13 +491,18 @@ getFragProb(
     if (frag2Size < std::min(pairOpt.minFragSupport, static_cast<pos_t>(frag2.readSize))) return;
 
 
-    isFragSupportSV = true;
-
     fragProb=fragDistro.cdf(frag1Size+frag2Size);
 #ifdef DEBUG_PAIR
     log_os << logtag << "cdf: " << fragProb << " final: " << std::min(fragProb, (1-fragProb)) << "\n";
 #endif
     fragProb = std::min(fragProb, (1-fragProb));
+
+    /// TODO: any cases where fragProb is 0 should be some soft of mulit-SV error artifact (like a large CIGAR indel in one of the reads of the pair)
+    ///     try to improve this case -- ideally we can account for such events.
+    if (fragProb > 0.)
+    {
+        isFragSupportSV = true;
+    }
 }
 
 
@@ -484,6 +517,13 @@ getSVPairSupport(
     SVEvidence& evidence)
 {
     static PairOptions pairOpt;
+
+#ifdef DEBUG_PAIR
+    static const std::string logtag("getSVPairSupport: ");
+    log_os << logtag << "starting alt pair search for sv: " << sv << "\n";
+#endif
+
+    if (svData.isSkipped()) return;
 
     const unsigned minMapQ(_readScanner.getMinMapQ());
 
@@ -501,7 +541,26 @@ getSVPairSupport(
         BOOST_FOREACH(const SVCandidateSetReadPair& pair, svDataGroup)
         {
             // is this read pair associated with this candidateIndex? (each read pair can be associated with multiple candidates)
-            if (0 == std::count(pair.svIndex.begin(),pair.svIndex.end(), sv.candidateIndex)) continue;
+            bool isIndexFound(false);
+            unsigned linkIndex(0);
+            BOOST_FOREACH(const SVPairAssociation& sva, pair.svLink)
+            {
+                if (sv.candidateIndex == sva.index)
+                {
+                    isIndexFound = true;
+                    break;
+                }
+                linkIndex++;
+            }
+
+            if (! isIndexFound) continue;
+
+            /// do we assert (strict) or skip (non-strict) on non-matching pair/sv associations?
+            bool isStrictMatch(true);
+            if (pair.svLink.size() > 1)
+            {
+                if (! SVEvidenceType::isPairType(pair.svLink[linkIndex].evtype)) isStrictMatch=false;
+            }
 
             if (! (pair.read1.isSet() || pair.read2.isSet())) continue;
 
@@ -517,12 +576,11 @@ getSVPairSupport(
             }
 
 #ifdef DEBUG_PAIR
-            log_os << "getSVPairSupport: Finding alt pair evidence for: " << qname << "\n";
+            log_os << logtag << "Finding alt pair evidence for svIndex: " << sv.candidateIndex << "  qname: " << qname << "\n";
 #endif
 
             SVFragmentEvidence& fragment(evidence.getSample(isTumor)[qname]);
             SVFragmentEvidenceAllele& alt(fragment.alt);
-
 
             if (pair.read1.isSet())
             {
@@ -541,13 +599,15 @@ getSVPairSupport(
                 sample.alt.spanPairCount += 1;
             }
 
-
             /// get fragment prob, and possibly withdraw fragment support based on refined sv breakend coordinates:
             bool isFragSupportSV(false);
             float fragProb(0);
-            getFragProb(pairOpt, sv, pair, fragDistro, isFragSupportSV, fragProb);
+            getFragProb(pairOpt, sv, pair, fragDistro, isStrictMatch, isFragSupportSV, fragProb);
 
             if (! isFragSupportSV) continue;
+
+            /// TODO: if fragProb is zero this should be a bug -- follow-up to see if we can make this an assert(fragProb > 0.) instead
+            if (fragProb <= 0.) continue;
 
             // for all large spanning events -- we don't test for pair support of the two breakends separately -- this could be
             // beneficial if there was an unusually large insertion associated with the event. For now we approximate that
@@ -565,3 +625,4 @@ getSVPairSupport(
     //
     getSVRefPairSupport(pairOpt, sv, baseInfo, evidence);
 }
+

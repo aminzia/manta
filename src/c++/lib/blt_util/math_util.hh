@@ -11,12 +11,11 @@
 // <https://github.com/sequencing/licenses/>
 //
 
-/// \file
-
+///
 /// \author Chris Saunders
 ///
-#ifndef __MATH_UTIL_HH
-#define __MATH_UTIL_HH
+
+#pragma once
 
 #include "boost/math/special_functions/log1p.hpp"
 
@@ -54,5 +53,3 @@ log_sum(FloatType x1, FloatType x2)
     if (x1<x2) std::swap(x1,x2);
     return x1 + log1p_switch(std::exp(x2-x1));
 }
-
-#endif

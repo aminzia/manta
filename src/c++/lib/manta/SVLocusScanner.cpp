@@ -94,6 +94,7 @@ GetSplitSVCandidate(
     const int32_t alignTid,
     const pos_t leftPos,
     const pos_t rightPos,
+    const SVEvidenceType::index_t& svSource,
     const bool isComplex = false)
 {
     SVCandidate sv;
@@ -103,11 +104,11 @@ GetSplitSVCandidate(
     localBreakend.interval.tid = alignTid;
     remoteBreakend.interval.tid = alignTid;
 
-    localBreakend.splitCount++;
+    localBreakend.lowresEvidence.add(svSource);
 
     if (! isComplex)
     {
-        remoteBreakend.splitCount++;
+        remoteBreakend.lowresEvidence.add(svSource);
         localBreakend.state = SVBreakendState::RIGHT_OPEN;
         remoteBreakend.state = SVBreakendState::LEFT_OPEN;
     }
@@ -183,7 +184,7 @@ updateSABreakend(
 
 
 
-/// get SV candidates from indels in the read alignment
+/// get SV candidates from SA-tag split-read alignment
 static
 SVCandidate
 GetSplitSACandidate(
@@ -191,10 +192,13 @@ GetSplitSACandidate(
     const ChromAlignment& localAlign,
     const ChromAlignment& remoteAlign)
 {
+    using namespace SVEvidenceType;
+    static const index_t svSource(SPLIT_ALIGN);
+
     SVCandidate sv;
 
-    sv.bp1.splitCount++;
-    sv.bp2.splitCount++;
+    sv.bp1.lowresEvidence.add(svSource);
+    sv.bp2.lowresEvidence.add(svSource);
 
     updateSABreakend(dopt, localAlign, sv.bp1);
     updateSABreakend(dopt, remoteAlign, sv.bp2);
@@ -231,7 +235,7 @@ getSACandidatesFromRead(
     ChromAlignment remoteAlign;
 
     // For now we will only handle a single split alignment
-    //  In the future we will need to sort the SA tags by order on of segements on
+    //  In the future we will need to sort the SA tags by order on of segments on
     //   the actual template.
     //  We may also have to toss conflicting segments that map to two different areas,
     //   or at least find some way of dealing with them.
@@ -269,7 +273,7 @@ getSACandidatesFromRead(
                   << ", " << saChr
                   << ", " << saPos
                   << ", " << saStrand
-                  << ", " << remotePath << std::endl;
+                  << ", " << remotePath << '\n';
         */
 
         // At this point we don't care about strand
@@ -287,8 +291,10 @@ getSVCandidatesFromReadIndels(
     const ChromAlignment& align,
     std::vector<SVCandidate>& candidates)
 {
-    using namespace ALIGNPATH;
+    using namespace SVEvidenceType;
+    static const index_t svSource(CIGAR);
 
+    using namespace ALIGNPATH;
     const std::pair<unsigned,unsigned> ends(get_match_edge_segments(align.path));
 
     unsigned pathIndex(0);
@@ -318,7 +324,7 @@ getSVCandidatesFromReadIndels(
                 if (ps.length >= opt.minCandidateVariantSize)
                 {
                     static const bool isComplex(true);
-                    candidates.push_back(GetSplitSVCandidate(dopt, align.tid, refHeadPos, refHeadPos, isComplex));
+                    candidates.push_back(GetSplitSVCandidate(dopt, align.tid, refHeadPos, refHeadPos, svSource, isComplex));
                 }
             }
         }
@@ -327,7 +333,7 @@ getSVCandidatesFromReadIndels(
             const swap_info sinfo(align.path,pathIndex);
             if ((sinfo.delete_length >= opt.minCandidateVariantSize) || (sinfo.insert_length >= opt.minCandidateVariantSize))
             {
-                candidates.push_back(GetSplitSVCandidate(dopt, align.tid, refHeadPos, refHeadPos+sinfo.delete_length));
+                candidates.push_back(GetSplitSVCandidate(dopt, align.tid, refHeadPos, refHeadPos+sinfo.delete_length, svSource));
             }
 
             nPathSegments = sinfo.n_seg;
@@ -340,14 +346,14 @@ getSVCandidatesFromReadIndels(
             {
                 if (ps.length >= opt.minCandidateVariantSize)
                 {
-                    candidates.push_back(GetSplitSVCandidate(dopt, align.tid, refHeadPos, refHeadPos+ps.length));
+                    candidates.push_back(GetSplitSVCandidate(dopt, align.tid, refHeadPos, refHeadPos+ps.length, svSource));
                 }
             }
             else if (ps.type == INSERT)
             {
                 if (ps.length >= opt.minCandidateVariantSize)
                 {
-                    candidates.push_back(GetSplitSVCandidate(dopt, align.tid, refHeadPos, refHeadPos));
+                    candidates.push_back(GetSplitSVCandidate(dopt, align.tid, refHeadPos, refHeadPos, svSource));
                 }
             }
         }
@@ -582,18 +588,23 @@ getSVCandidatesFromSemiAligned(
     getSVBreakendCandidateSemiAligned(bamRead,bkptRef,leadingMismatchLen, trailingMismatchLen);
 
     // soft-clipped reads don't define a full hypothesis, so they're always evidence for a 'complex' ie. undefined, event:
+    using namespace SVEvidenceType;
+    static const index_t svSource(SEMIALIGN);
+
+    // semi-aligned reads don't define a full hypothesis, so they're always evidence for a 'complex' ie. undefined, event
+    // in a fashion analogous to clipped reads
     static const bool isComplex(true);
 
     if (leadingMismatchLen >= opt.minSemiAlignedMismatchLen)
     {
-        const pos_t clipPos(bamAlign.pos);
-        candidates.push_back(GetSplitSVCandidate(opt,bamRead.target_id(),clipPos,clipPos,isComplex));
+        const pos_t pos(bamAlign.pos);
+        candidates.push_back(GetSplitSVCandidate(opt,bamRead.target_id(),pos,pos,svSource,isComplex));
     }
 
     if (trailingMismatchLen >= opt.minSemiAlignedMismatchLen)
     {
-        const pos_t clipPos(bamAlign.pos + apath_ref_length(bamAlign.path));
-        candidates.push_back(GetSplitSVCandidate(opt,bamRead.target_id(),clipPos,clipPos,isComplex));
+        const pos_t pos(bamAlign.pos + apath_ref_length(bamAlign.path));
+        candidates.push_back(GetSplitSVCandidate(opt,bamRead.target_id(),pos,pos,svSource,isComplex));
     }
 
 }
@@ -609,6 +620,9 @@ getSVCandidatesFromReadClip(
     const SimpleAlignment& bamAlign,
     std::vector<SVCandidate>& candidates)
 {
+    using namespace SVEvidenceType;
+    static const index_t svSource(SOFTCLIP);
+
     unsigned leadingClipLen(0), trailingClipLen(0);
     getSVBreakendCandidateClip(bamRead, bamAlign.path, leadingClipLen, trailingClipLen);
 
@@ -618,13 +632,13 @@ getSVCandidatesFromReadClip(
     if (leadingClipLen >= opt.minSoftClipLen)
     {
         const pos_t clipPos(bamAlign.pos);
-        candidates.push_back(GetSplitSVCandidate(opt,bamRead.target_id(),clipPos,clipPos,isComplex));
+        candidates.push_back(GetSplitSVCandidate(opt,bamRead.target_id(),clipPos,clipPos, svSource, isComplex));
     }
 
     if (trailingClipLen >= opt.minSoftClipLen)
     {
         const pos_t clipPos(bamAlign.pos + apath_ref_length(bamAlign.path));
-        candidates.push_back(GetSplitSVCandidate(opt,bamRead.target_id(),clipPos,clipPos,isComplex));
+        candidates.push_back(GetSplitSVCandidate(opt,bamRead.target_id(),clipPos,clipPos, svSource, isComplex));
     }
 }
 
@@ -641,7 +655,14 @@ getSVCandidatesFromPair(
     const bam_record* remoteReadPtr,
     std::vector<SVCandidate>& candidates)
 {
+    using namespace SVEvidenceType;
+    static const index_t svLocalPair(LOCAL_PAIR);
+    static const index_t svPair(PAIR);
+
     if (localRead.is_unmapped() || localRead.is_mate_unmapped()) return;
+
+    /// special case typically used for RNA-Seq analysis:
+    if (opt.isIgnoreAnomProperPair && localRead.is_proper_pair()) return;
 
     // update localEvidenceRange:
     const unsigned readSize(apath_read_length(localAlign.path));
@@ -662,7 +683,7 @@ getSVCandidatesFromPair(
     SVBreakend& localBreakend(sv.bp1);
     SVBreakend& remoteBreakend(sv.bp2);
 
-    localBreakend.readCount = 1;
+    localBreakend.lowresEvidence.add(svLocalPair);
 
     // if remoteRead is not available, estimate mate localRead size to be same as local,
     // and assume no clipping on mate localRead:
@@ -689,10 +710,10 @@ getSVCandidatesFromPair(
             remoteReadNoninsertSize=(remoteReadSize-apath_read_lead_size(remoteApath));
         }
 
-        remoteBreakend.readCount = 1;
+        remoteBreakend.lowresEvidence.add(svLocalPair);
 
-        localBreakend.pairCount = 1;
-        remoteBreakend.pairCount = 1;
+        localBreakend.lowresEvidence.add(svPair);
+        remoteBreakend.lowresEvidence.add(svPair);
     }
 
     // this is only designed to be valid when reads are on the same chrom with default orientation:
@@ -796,6 +817,14 @@ getSVCandidatesFromShadow(
     const bam_record* remoteReadPtr,
     std::vector<SVCandidate>& candidates)
 {
+    using namespace SVEvidenceType;
+    static const index_t svSource(SHADOW);
+
+    /*if (NULL == remoteReadPtr)
+    {
+        // we want info on both reads
+        return;
+    }*/
     static const bool isComplex(true);
     pos_t singletonGenomePos(0);
     int targetId(0);
@@ -846,9 +875,66 @@ getSVCandidatesFromShadow(
     }
     const pos_t properPairRangeOffset = static_cast<pos_t>(rstats.properPair.min + (rstats.properPair.max-rstats.properPair.min)/2);
     const pos_t shadowGenomePos = singletonGenomePos + properPairRangeOffset;
-    candidates.push_back(GetSplitSVCandidate(opt,targetId,shadowGenomePos,shadowGenomePos,isComplex));
+    candidates.push_back(GetSplitSVCandidate(opt,targetId,shadowGenomePos,shadowGenomePos, svSource, isComplex));
 }
 //#endif
+
+
+
+static
+void
+getSingleReadSVCandidates(
+    const ReadScannerOptions& opt,
+    const ReadScannerDerivOptions& dopt,
+    const SVLocusScanner::CachedReadGroupStats& rstats,
+    const bam_record& localRead,
+    const ChromAlignment& localAlign,
+    const bam_record* remoteReadPtr,
+    const chromMap_t& chromToIndex,
+    std::vector<SVCandidate>& candidates,
+    const std::string& bkptRef
+    )
+{
+    using namespace illumina::common;
+
+#ifdef DEBUG_SCANNER
+    static const std::string logtag("getSingleReadSVCandidates");
+    log_os << logtag << " post-indels candidate_size: " << candidates.size() << "\n";
+#endif
+
+    /// TODO: can't handle these yet, but plan to soon:
+    //if (localRead.is_mate_unmapped()) return;
+
+    // - process any large indels in the localRead:
+    getSVCandidatesFromReadIndels(opt, dopt, localAlign, candidates);
+
+#ifdef DEBUG_SCANNER
+    log_os << logtag << " post-indels candidate_size: " << candidates.size() << "\n";
+#endif
+
+
+    // - process soft-clip in the localRead:
+    getSVCandidatesFromReadClip(opt, localRead, localAlign, candidates);
+#ifdef DEBUG_SCANNER
+        log_os << logtag << " post-clip candidate_size: " << candidates.size() << "\n";
+#endif
+    if (bkptRef != "NA") {
+    	getSVCandidatesFromSemiAligned(opt, localRead, localAlign, candidates, bkptRef);
+    }
+#ifdef DEBUG_SCANNER
+        log_os << logtag << " post-semialigned candidate_size: " << candidates.size() << "\n";
+#endif
+
+    /// - process split/SA reads:
+    getSACandidatesFromRead(dopt, localRead, localAlign, chromToIndex, candidates);
+
+#ifdef DEBUG_SCANNER
+    log_os << logtag << " post-split read candidate_size: " << candidates.size() << "\n";
+#endif
+
+    // TODO: process shadow reads
+    getSVCandidatesFromShadow(opt, rstats, localRead, localAlign,remoteReadPtr,candidates);
+}
 
 
 
@@ -867,54 +953,25 @@ getReadBreakendsImpl(
     const chromMap_t& chromToIndex,
     std::vector<SVCandidate>& candidates,
     known_pos_range2& localEvidenceRange,
-    const std::string& bkptRef,
-    const bool retrieveLocalEvidence)
-
+    const std::string& bkptRef)
 {
     using namespace illumina::common;
-
-#ifdef DEBUG_SCANNER
-    static const std::string logtag("getReadBreakendsImpl");
-    log_os << logtag << " post-indels candidate_size: " << candidates.size() << "\n";
-#endif
 
     /// TODO: can't handle these yet, but plan to soon:
     //if (localRead.is_mate_unmapped()) return;
 
-    /// get soem basic derived information from the bam_record:
+    /// get some basic derived information from the bam_record:
     const ChromAlignment localAlign(localRead);
 
-    // - process any large indels in the localRead:
-    getSVCandidatesFromReadIndels(opt, dopt, localAlign, candidates);
+    getSingleReadSVCandidates(opt, dopt, rstats, localRead, localAlign, remoteReadPtr, chromToIndex, candidates, bkptRef);
 
-#ifdef DEBUG_SCANNER
-    static const std::string logtag("getReadBreakendsImpl");
-    log_os << logtag << " post-indels candidate_size: " << candidates.size() << "\n";
-#endif
-
-    if (retrieveLocalEvidence)
+    if (NULL != remoteReadPtr)
     {
-        // - process soft-clip in the localRead:
-        getSVCandidatesFromReadClip(opt, localRead, localAlign, candidates);
-#ifdef DEBUG_SCANNER
-        log_os << logtag << " post-clip candidate_size: " << candidates.size() << "\n";
-#endif
-        getSVCandidatesFromSemiAligned(opt, localRead, localAlign, candidates, bkptRef);
-#ifdef DEBUG_SCANNER
-        log_os << logtag << " post-semialigned candidate_size: " << candidates.size() << "\n";
-#endif
-        //std::cerr << " post-semialigned candidate_size: " << candidates.size() << "\n";
+        const bam_record& remoteRead(*remoteReadPtr);
+        const ChromAlignment remoteAlign(remoteRead);
+
+        getSingleReadSVCandidates(opt, dopt, rstats, remoteRead, remoteAlign, remoteReadPtr, chromToIndex, candidates, bkptRef);
     }
-
-    /// - process split/SA reads:
-    getSACandidatesFromRead(dopt, localRead, localAlign, chromToIndex, candidates);
-
-#ifdef DEBUG_SCANNER
-    log_os << logtag << " post-split read candidate_size: " << candidates.size() << "\n";
-#endif
-
-    // TODO: process shadow reads
-    getSVCandidatesFromShadow(opt, rstats, localRead, localAlign,remoteReadPtr,candidates);
 
     // - process anomalous read pairs:
     getSVCandidatesFromPair(opt, rstats, localRead, localAlign, remoteReadPtr, candidates);
@@ -924,7 +981,7 @@ getReadBreakendsImpl(
 #endif
 
     // update localEvidence range:
-    // note this is only used if candidates were added, so there's no harm is setting it every time:
+    // note this is only used if candidates were added, so there's no harm in setting it every time:
     const unsigned localRefLength(apath_ref_length(localAlign.path));
     const pos_t startRefPos(localRead.pos()-1);
     const pos_t endRefPos(startRefPos+localRefLength);
@@ -966,7 +1023,6 @@ getReadBreakendsImpl(
             oss << "\n"
                 << "\tSVCandidate: " << sv << "\n";
             BOOST_THROW_EXCEPTION(LogicException(oss.str()));
-
         }
     }
 }
@@ -986,9 +1042,7 @@ getSVLociImpl(
     const ReadScannerDerivOptions& dopt,
     const SVLocusScanner::CachedReadGroupStats& rstats,
     const bam_record& bamRead,
-    //std::vector<SVLocus>& loci,
     const std::string& bkptRef,
-    const bool retrieveLocalEvidence,
     const chromMap_t& chromToIndex,
     std::vector<SVLocus>& loci)
 {
@@ -998,7 +1052,7 @@ getSVLociImpl(
     std::vector<SVCandidate> candidates;
     known_pos_range2 localEvidenceRange;
 
-    getReadBreakendsImpl(opt, dopt, rstats, bamRead, NULL, chromToIndex, candidates, localEvidenceRange, bkptRef,retrieveLocalEvidence);
+    getReadBreakendsImpl(opt, dopt, rstats, bamRead, NULL, chromToIndex, candidates, localEvidenceRange, bkptRef);
 
 #ifdef DEBUG_SCANNER
     static const std::string logtag("getSVLociImpl");
@@ -1030,15 +1084,15 @@ getSVLociImpl(
         unsigned localEvidenceWeight(0);
         unsigned remoteEvidenceWeight(0);
 
-        if (localBreakend.splitCount != 0)
+        if (localBreakend.getAnyNonPairCount() != 0)
         {
             localEvidenceWeight = SVObservationWeights::internalReadEvent;
-            if (remoteBreakend.splitCount != 0)
+            if (remoteBreakend.getAnyNonPairCount() != 0)
             {
                 remoteEvidenceWeight = SVObservationWeights::internalReadEvent;
             }
         }
-        else if (localBreakend.readCount != 0)
+        else if (localBreakend.getLocalPairCount() != 0)
         {
             bool isClose(false);
             if (is_innie_pair(bamRead))
@@ -1050,7 +1104,7 @@ getSVLociImpl(
             if (isClose) thisWeight = SVObservationWeights::closeReadPair;
 
             localEvidenceWeight = thisWeight;
-            if (remoteBreakend.readCount != 0)
+            if (remoteBreakend.getLocalPairCount() != 0)
             {
                 remoteEvidenceWeight = thisWeight;
             }
@@ -1243,19 +1297,16 @@ SVLocusScanner::
 getSVLoci(
     const bam_record& bamRead,
     const unsigned defaultReadGroupIndex,
-    //std::vector<SVLocus>& loci,
     const std::string& bkptRef,
-    const bool retrieveLocalEvidence,
     const std::map<std::string, int32_t>& chromToIndex,
     std::vector<SVLocus>& loci) const
 {
     loci.clear();
 
     const CachedReadGroupStats& rstats(_stats[defaultReadGroupIndex]);
-    //getSVLociImpl(_opt, rstats, bamRead, loci, bkptRef, retrieveLocalEvidence, chromToIndex, loci);
     cachedQname = bamRead.qname();
     cachedMapq  = bamRead.map_qual();
-    getSVLociImpl(_opt, _dopt, rstats, bamRead, bkptRef, retrieveLocalEvidence, chromToIndex, loci);
+    getSVLociImpl(_opt, _dopt, rstats, bamRead, bkptRef, chromToIndex, loci);
 }
 
 
@@ -1266,13 +1317,13 @@ getBreakendPair(
     const bam_record& localRead,
     const bam_record* remoteReadPtr,
     const unsigned defaultReadGroupIndex,
-    const bool retrieveLocalEvidence,
     const  std::map<std::string, int32_t>& chromToIndex,
+    const std::string& bkptRef,
     std::vector<SVCandidate>& candidates) const
 {
     const CachedReadGroupStats& rstats(_stats[defaultReadGroupIndex]);
 
     // throw evidence range away in this case
     known_pos_range2 evidenceRange;
-    getReadBreakendsImpl(_opt, _dopt, rstats, localRead, remoteReadPtr, chromToIndex, candidates, evidenceRange, "NA", retrieveLocalEvidence);
+    getReadBreakendsImpl(_opt, _dopt, rstats, localRead, remoteReadPtr, chromToIndex, candidates, evidenceRange, bkptRef);
 }
