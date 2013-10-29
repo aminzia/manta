@@ -459,9 +459,7 @@ getCandidatesFromData(
 
     const unsigned bamCount(_bamStreams.size());
 
-    //unsigned bamIndex(0);
     for (unsigned bamIndex(0);bamIndex<bamCount;++bamIndex)
-    //BOOST_FOREACH(streamPtr& bamPtr, _bamStreams)
     {
         SVCandidateSetReadPairSampleGroup& svDataGroup(svData.getDataGroup(bamIndex));
 
@@ -558,7 +556,6 @@ getCandidatesFromData(
                 svs.back().candidateIndex = pair.svLink.back().index;
             }
         }
-        ++bamIndex;
     }
 
 #ifdef DEBUG_SVDATA
