@@ -60,7 +60,11 @@ getLnLhood(
     float lnLhood(0);
     for (unsigned i(0); i<querySize; i++)
     {
-        assert((scanWindowBegin+i) != scanWindowEnd);
+        //assert((scanWindowBegin+i) != scanWindowEnd);
+        if ((scanWindowBegin+i) == scanWindowEnd) {
+            return lnLhood;
+        }
+        
 
         // put a lower-bound on quality values:
         const int baseQual(std::max(2,static_cast<int>(queryQual[i])));
@@ -104,7 +108,10 @@ calculateAlignScore(
 
     for (unsigned i(0); i<querySize; i++)
     {
-        assert((scanWindowBegin+i) != scanWindowEnd);
+        //assert((scanWindowBegin+i) != scanWindowEnd);
+        if ((scanWindowBegin+i) == scanWindowEnd) {
+            break;
+        }
 
         if ((querySeq[i] != *(scanWindowBegin+i)) || (querySeq[i] == 'N'))
         {
