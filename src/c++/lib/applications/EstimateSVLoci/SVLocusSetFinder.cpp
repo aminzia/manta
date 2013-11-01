@@ -186,6 +186,10 @@ update(const bam_record& bamRead,
 
     const bool isLargeAnomalous(isAnomalous && isLargeFragment);
 
+#ifdef DEBUG_SFINDER
+    log_os << bamRead.qname() << " isAnomalous=" << isAnomalous << " isLargeFragment=" << isLargeFragment << "\n";
+#endif
+
     if (isLargeAnomalous) ++_anomCount;
     else                  ++_nonAnomCount;
 
@@ -194,6 +198,7 @@ update(const bam_record& bamRead,
     {
         isLocalAssemblyEvidence = _readScanner.isLocalAssemblyEvidence(bamRead,bkptRef);
     }
+    //std::cerr << bamRead.qname() << " isLargeAnomalous=" << isLargeAnomalous << " isLocalAssemblyEvidence=" << isLocalAssemblyEvidence << "\n";
 
     if (! ( isLargeAnomalous || isLocalAssemblyEvidence))
     {
@@ -201,7 +206,6 @@ update(const bam_record& bamRead,
     }
 
 #ifdef DEBUG_SFINDER
-    isLocalAssemblyEvidence = _readScanner.isLocalAssemblyEvidence(bamRead,bkptRef);
     log_os << "SFinder: Accepted read. isAnomalous "  << isAnomalous << " is Local assm evidence: " << isLocalAssemblyEvidence << " read: " << bamRead << "\n";
 #endif
 

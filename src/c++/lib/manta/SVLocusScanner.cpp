@@ -424,28 +424,35 @@ getSVBreakendCandidateSemiAligned(
 	    const uint8_t minQ,
 	    const float minQFrac)
 {
+	leadingMismatchLen = 0;
+    trailingMismatchLen = 0;
+
 	using namespace ALIGNPATH;
 	const std::string qrySeq(bamRead.get_bam_read().get_string());
 
 	ALIGNPATH::path_t apath;
 	bam_cigar_to_apath(bamRead.raw_cigar(),bamRead.n_cigar(),apath);
 
-	// soft-clipped reads, not looked at here
-	if (refSeq.size() != qrySeq.size())
-	{
-		//std::cout << "Skip because of bad ref length." << std::endl;
-	    return;
-	}
+    // TODO: remove hard coded max size of 100bp
+    if (has_large_indel(apath)) return;
 
-	//std::cout << "qrySeq = " << qrySeq << std::endl;
-	//std::cout << "refSeq = " << refSeq << std::endl;
+
+	//std::cerr << "qrySeq = " << qrySeq << std::endl;
+	//std::cerr << "refSeq = " << refSeq << std::endl;
+
+	// soft-clipped reads, not looked at here
+	/*if (refSeq.size() != qrySeq.size())
+	{
+		std::cerr << "Skip because of bad ref length." << std::endl;
+	    return;
+	}*/
+
 	apath_add_seqmatch(qrySeq.begin(), qrySeq.end(),
 	                   refSeq.begin(), refSeq.end(),
 	                   apath);
+    //std::cout << " apath=" << apath << std::endl;
 
 
-	leadingMismatchLen = 0;
-    trailingMismatchLen = 0;
 
     const uint8_t* qual(bamRead.qual());
     const unsigned readSize(bamRead.read_size());
@@ -481,6 +488,7 @@ getSVBreakendCandidateSemiAligned(
     }
 }
 
+
 // TODO: pass iterator instead of ref substring
 bool
 isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
@@ -492,14 +500,14 @@ isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
     bam_cigar_to_apath(bamRead.raw_cigar(),bamRead.n_cigar(),apath);
 
     // soft-clipped reads, not looked at here
-    if (refSeq.size() != qrySeq.size())
+    /*if (refSeq.size() != qrySeq.size())
     {
-        //std::cout << "Skip because of bad ref length." << std::endl;
+        std::cerr << "Skip because of bad ref length." << std::endl;
         return false;
-    }
+    }*/
 
-    //std::cout << "qrySeq = " << qrySeq << std::endl;
-    //std::cout << "refSeq = " << refSeq << std::endl;
+    //std::cerr << "qrySeq = " << qrySeq << std::endl;
+    //std::cerr << "refSeq = " << refSeq << std::endl;
     apath_add_seqmatch(qrySeq.begin(), qrySeq.end(),
                        refSeq.begin(), refSeq.end(),
                        apath);
@@ -511,15 +519,15 @@ isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
     static const std::string logtag("isSemiAligned");
     log_os << logtag << " semi-aligned score=" << semiAlignedScore << " read qname=" << bamRead.qname() << " apath=" << apath <<  std::endl;
 #endif
-    /*std::cout << " semi-aligned score=" << semiAlignedScore << " read qname=" << bamRead.qname() << " apath=" << apath <<  std::endl;
-    if (semiAlignedScore>minSemiAlignedScore) {
-        std::cout << "SEMI-ALIGNED" << std::endl;
-    } else {
-        std::cout << "NOT SEMI-ALIGNED" << std::endl;
-    }*/
+    //std::cerr << " semi-aligned score=" << semiAlignedScore << " read qname=" << bamRead.qname() << " apath=" << apath <<  std::endl;
+    //if (semiAlignedScore>minSemiAlignedScore) {
+        //std::cerr << "SEMI-ALIGNED" << std::endl;
+    //} else {
+        //std::cerr << "NOT SEMI-ALIGNED" << std::endl;
+    //}
     return (semiAlignedScore>minSemiAlignedScore);
 }
-
+#endif
 
 
 bool
@@ -1254,15 +1262,16 @@ isLocalAssemblyEvidence(
     const std::string& bkptRef) const
 {
     using namespace ALIGNPATH;
+    //std::cerr << "Testing " << bamRead.qname() << " for local assembly evidence " << "\n";
 
     {
-        //const std::string qry(bamRead.get_bam_read().get_string());
-        //ALIGNPATH::path_t apath;
-        //bam_cigar_to_apath(bamRead.raw_cigar(), bamRead.n_cigar(), apath);
         unsigned leadingMismatchLen(0), trailingMismatchLen(0);
         getSVBreakendCandidateSemiAligned(bamRead, bkptRef, leadingMismatchLen, trailingMismatchLen);
-        if ((leadingMismatchLen >= _opt.minSemiAlignedMismatchLen) || (trailingMismatchLen >= _opt.minSemiAlignedMismatchLen)) return true;
-        //if (isSemiAligned(bamRead,qry,bkptRef,_opt.minSemiAlignedScoreGraph)) return true;
+        //std::cerr << "leadingMismatchLen= " << leadingMismatchLen << " trailingMismatchLen=" << trailingMismatchLen << " _opt.minSemiAlignedMismatchLen=" <<  _opt.minSemiAlignedMismatchLen << std::endl;
+        if ((leadingMismatchLen >= _opt.minSemiAlignedMismatchLen) || (trailingMismatchLen >= _opt.minSemiAlignedMismatchLen)) {
+             return true;
+        }
+       
     }
 
     const SimpleAlignment bamAlign(bamRead);
@@ -1273,7 +1282,10 @@ isLocalAssemblyEvidence(
     {
         if (ps.type == INSERT || ps.type == DELETE)
         {
-            if (ps.length>=_opt.minCandidateVariantSize) return true;
+            //std::cerr << "ps.length=" << ps.length << " _opt.minCandidateVariantSize=" << _opt.minCandidateVariantSize << std::endl;
+            if (ps.length>=_opt.minCandidateVariantSize) {
+                return true;
+            }
         }
     }
 
@@ -1283,7 +1295,17 @@ isLocalAssemblyEvidence(
     {
         unsigned leadingClipLen(0), trailingClipLen(0);
         getSVBreakendCandidateClip(bamRead, bamAlign.path, leadingClipLen, trailingClipLen);
-        if ((leadingClipLen >= _opt.minSoftClipLen) || (trailingClipLen >= _opt.minSoftClipLen)) return true;
+        //std::cerr << "leadingClipLen= " << leadingClipLen << " trailingClipLen=" << trailingClipLen << " _opt.minSoftClipLen=" << _opt.minSoftClipLen  << "\n";
+        if ((leadingClipLen >= _opt.minSoftClipLen) || (trailingClipLen >= _opt.minSoftClipLen)) {          
+            return true;
+        }
+    }
+
+    {
+        const std::string qry(bamRead.get_bam_read().get_string());
+        ALIGNPATH::path_t apath;
+        bam_cigar_to_apath(bamRead.raw_cigar(), bamRead.n_cigar(), apath);
+        if (isSemiAligned(bamRead,qry,bkptRef,_opt.minSemiAlignedScoreGraph)) return true;
     }
 
     return false;

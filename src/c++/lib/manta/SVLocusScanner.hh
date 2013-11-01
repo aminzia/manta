@@ -83,6 +83,7 @@ bool
 isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
               const std::string& refSeq, const double minSemiAlignedScore);
 
+
 bool
 isGoodShadow(const bam_record& bamRead,
              const uint8_t lastMapq,

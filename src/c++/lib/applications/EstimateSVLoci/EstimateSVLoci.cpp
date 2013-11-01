@@ -34,7 +34,7 @@
 #include <iostream>
 #include <vector>
 
-
+//#define DEBUG_ESL
 
 static
 void
@@ -86,6 +86,10 @@ runESL(const ESLOptions& opt)
     const std::map<std::string, int32_t>& chromToIndex(bamHeader.chrom_to_index);
 
     const GenomeInterval scanRegion(tid,beginPos,endPos);
+#ifdef DEBUG_ESL
+    static const std::string log_tag("EstimateSVLoci");
+    log_os << log_tag << " scanRegion= " << scanRegion << "\n";
+#endif
 
     reference_contig_segment refSegment;
     getIntervalReferenceSegment(opt.referenceFilename,bamHeader,scanRegion,refSegment);
@@ -124,6 +128,9 @@ runESL(const ESLOptions& opt)
             const int refSize(refSegment.seq().size());
             if (alPos < 0 || (alPos+alLen) > refSize) continue;
             ref = refSegment.seq().substr(alPos,alLen);
+#ifdef DEBUG_ESL
+            log_os << log_tag << " testing read= " << read.qname() << " apath=" << apath  << "\n";
+#endif
         }
 
         locusFinder.update(read,current.sample_no,ref,chromToIndex);
@@ -131,7 +138,9 @@ runESL(const ESLOptions& opt)
 
     // finished updating:
     locusFinder.flush();
-
+#ifdef DEBUG_ESL
+    log_os << log_tag << " found " << locusFinder.getLocusSet().size() << " loci. \n";
+#endif
     locusFinder.getLocusSet().save(opt.outputFilename.c_str());
 }
 

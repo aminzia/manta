@@ -34,8 +34,8 @@ struct ReadScannerOptions
         minSemiAlignedMismatchLen(4),
         // These numbers are based on checking a few dozens reads
         // and might need some fine-tuning
-        minSemiAlignedScoreGraph(120.0),
-        minSemiAlignedScoreCandidates(100.0),
+        minSemiAlignedScoreGraph(180.0),
+        minSemiAlignedScoreCandidates(180.0),
         minSingletonMapqGraph(30),
         minSingletonMapqCandidates(20),
         isIgnoreAnomProperPair(false)
