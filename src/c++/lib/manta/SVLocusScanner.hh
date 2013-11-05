@@ -38,14 +38,16 @@
 struct SVObservationWeights
 {
     // input evidence:
-    static const unsigned readPair = 3;
-    static const unsigned closeReadPair = 1;
-    static const unsigned internalReadEvent = 3; ///< indels, soft-clip, etc.
+    static const unsigned readPair = 6;
+    static const unsigned closeReadPair = 2;
+    static const unsigned reallyCloseReadPair = 1;
+    static const unsigned internalReadEvent = 6; ///< indels, soft-clip, etc.
 
     static const float closePairFactor; ///< fragments within this factor of the minimum size cutoff are treated as 'close' pairs and receive a modified evidence count
+    static const float reallyClosePairFactor; ///< fragments within this factor of the minimum size cutoff are treated as 'reallyClose' pairs and receive a modified evidence count
 
     // noise reduction:
-    static const unsigned observation = 3; ///< 'average' observation weight, this is used to scale noise filtration, but not for any evidence type
+    static const unsigned observation = 6; ///< 'average' observation weight, this is used to scale noise filtration, but not for any evidence type
 };
 
 
@@ -221,7 +223,8 @@ struct SVLocusScanner
 
         Range evidencePair;
 
-        int minFarFragmentSize; ///< beyond the properPair anomalous threshold, there is a threshold to distinguish near and far pairs for the purpose of evidence weight
+        int minCloseFragmentSize; ///< beyond the properPair anomalous threshold, there is a threshold to distinguish 'really-close' and 'close' pairs for the purpose of evidence weight
+        int minFarFragmentSize; ///< beyond the properPair anomalous threshold, there is a threshold to distinguish close and far pairs for the purpose of evidence weight
     };
 
 private:
