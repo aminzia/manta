@@ -405,25 +405,7 @@ getFragProb(
     }
 
 #ifdef DEBUG_PAIR
-    log_os << logtag << "read1: ";
-    if (pair.read1.isSet())
-    {
-        log_os << pair.read1.bamrec << "\n";
-    }
-    else
-    {
-        log_os << "UNKNOWN\n";
-    }
-
-    log_os << logtag << "read2: ";
-    if (pair.read1.isSet())
-    {
-        log_os << pair.read2.bamrec << "\n";
-    }
-    else
-    {
-        log_os << "UNKNOWN\n";
-    }
+    log_os << logtag << "pair: " << pair << "\n";
     log_os << logtag << "sv: " << sv << "\n";
     log_os << logtag << "frag1: " << frag1 << "\n";
     log_os << logtag << "frag2: " << frag2 << "\n";
@@ -541,19 +523,21 @@ getSVPairSupport(
         BOOST_FOREACH(const SVCandidateSetReadPair& pair, svDataGroup)
         {
             // is this read pair associated with this candidateIndex? (each read pair can be associated with multiple candidates)
-            bool isIndexFound(false);
             unsigned linkIndex(0);
-            BOOST_FOREACH(const SVPairAssociation& sva, pair.svLink)
             {
-                if (sv.candidateIndex == sva.index)
+                bool isIndexFound(false);
+                BOOST_FOREACH(const SVPairAssociation& sva, pair.svLink)
                 {
-                    isIndexFound = true;
-                    break;
+                    if (sv.candidateIndex == sva.index)
+                    {
+                        isIndexFound = true;
+                        break;
+                    }
+                    linkIndex++;
                 }
-                linkIndex++;
-            }
 
-            if (! isIndexFound) continue;
+                if (! isIndexFound) continue;
+            }
 
             /// do we assert (strict) or skip (non-strict) on non-matching pair/sv associations?
             bool isStrictMatch(true);
@@ -602,7 +586,10 @@ getSVPairSupport(
             /// get fragment prob, and possibly withdraw fragment support based on refined sv breakend coordinates:
             bool isFragSupportSV(false);
             float fragProb(0);
-            getFragProb(pairOpt, sv, pair, fragDistro, isStrictMatch, isFragSupportSV, fragProb);
+            if (pair.read1.isSet() && pair.read2.isSet())
+            {
+                getFragProb(pairOpt, sv, pair, fragDistro, isStrictMatch, isFragSupportSV, fragProb);
+            }
 
             if (! isFragSupportSV) continue;
 

@@ -147,6 +147,12 @@ struct SVLocusScanner
         const bam_record& bamRead,
         const unsigned defaultReadGroupIndex) const;
 
+    /// return true if the read is anomalous, for any anomaly type besides being a short innie read:
+    bool
+    isNonShortAnomalous(
+        const bam_record& bamRead,
+        const unsigned defaultReadGroupIndex) const;
+
     /// \brief is the read likely to indicate the presence of a small SV?
     ///
     /// this function flags reads which could contribute to a local small-variant assembly
@@ -191,7 +197,7 @@ struct SVLocusScanner
         const unsigned defaultReadGroupIndex,
         const std::map<std::string, int32_t>& chromToIndex,
         const std::string& bkptRef,
-        std::vector<SVCandidate>& candidates) const;
+        std::vector<SVObservation>& candidates) const;
 
     /// provide direct access to the frag distro for
     /// functions which can't be cached

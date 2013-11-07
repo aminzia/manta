@@ -19,7 +19,10 @@ import os,sys
 
 scriptDir=os.path.abspath(os.path.dirname(__file__))
 scriptName=os.path.basename(__file__)
-workflowDir="@MANTA_FULL_PYTHON_LIBDIR@"
+workflowDir=os.path.abspath(os.path.join(scriptDir,"@MANTA_RELATIVE_PYTHON_LIBDIR@"))
+
+version="@MANTA_FULL_VERSION@"
+
 
 # quick test to see if 'make' was run
 # if not os.path.exists(os.path.join(scriptDir,'..',"make.complete")) :
@@ -40,9 +43,11 @@ from checkChromSet import checkChromSet
 class MantaWorkflowOptions(MantaWorkflowOptionsBase) :
 
     def workflowDescription(self) :
-        return """This script configures the Manta SV analysis pipeline.
+        return """Version: %s
+
+This script configures the Manta SV analysis pipeline.
 You must specify a BAM file for at least one sample.
-"""
+""" % (version)
 
     validAlignerModes = ["bwa","isaac"]
 
@@ -76,6 +81,9 @@ You must specify a BAM file for at least one sample.
 
 
     def getOptionDefaults(self) :
+
+        megaBase=1000000
+
         self.configScriptDir=scriptDir
         defaults=MantaWorkflowOptionsBase.getOptionDefaults(self)
         defaults.update({
@@ -85,8 +93,8 @@ You must specify a BAM file for at least one sample.
             'isRNA' : False,
             'useExistingAlignStats' : False,
             'useExistingChromDepths' : False,
-            'binSize' : 25000000,
-            'nonlocalWorkBins' : 128
+            'binSize' : 12*megaBase,
+            'nonlocalWorkBins' : 256
                           })
         return defaults
 
@@ -153,7 +161,7 @@ You must specify a BAM file for at least one sample.
 def main() :
 
     primarySectionName="manta"
-    options,iniSections=MantaWorkflowOptions().getRunOptions(primarySectionName)
+    options,iniSections=MantaWorkflowOptions().getRunOptions(primarySectionName, version=version)
 
     # we don't need to instantiate the workflow object during configuration,
     # but this is done here to trigger additional parameter validation:

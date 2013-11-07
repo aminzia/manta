@@ -243,6 +243,7 @@ struct SVBreakend
     isIntersect(const SVBreakend& rhs) const
     {
         if (state != rhs.state) return false;
+        if (SVBreakendState::UNKNOWN == state) return true;
         return interval.isIntersect(rhs.interval);
     }
 
@@ -289,15 +290,28 @@ struct SVBreakend
     unsigned
     getAnyNonPairCount() const
     {
+        using namespace SVEvidenceType;
+
         unsigned sum(0);
-        for (int i(0); i<SVEvidenceType::SIZE; ++i)
+        for (int i(0); i<SIZE; ++i)
         {
-            if (i == SVEvidenceType::PAIR) continue;
-            if (i == SVEvidenceType::LOCAL_PAIR) continue;
-            if (i == SVEvidenceType::UNKNOWN) continue;
+            if (i == PAIR) continue;
+            if (i == LOCAL_PAIR) continue;
+            if (i == UNKNOWN) continue;
             sum += lowresEvidence.getVal(i);
         }
         return sum;
+    }
+
+    // include any evidence type witch defines a two-region hypothesis
+    unsigned
+    getSpanningCount() const
+    {
+        using namespace SVEvidenceType;
+
+        return (lowresEvidence.getVal(PAIR) +
+                lowresEvidence.getVal(CIGAR) +
+                lowresEvidence.getVal(SPLIT_ALIGN));
     }
 
 public:

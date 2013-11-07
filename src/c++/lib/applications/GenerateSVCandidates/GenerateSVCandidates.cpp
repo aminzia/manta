@@ -24,6 +24,8 @@
 #include "SVScorer.hh"
 
 #include "blt_util/log.hh"
+#include "blt_util/bam_header_util.hh"
+
 #include "common/Exceptions.hh"
 #include "common/OutStream.hh"
 #include "manta/ReadGroupStatsSet.hh"
@@ -32,6 +34,7 @@
 #include "format/VcfWriterCandidateSV.hh"
 #include "format/VcfWriterDiploidSV.hh"
 #include "format/VcfWriterSomaticSV.hh"
+#include "truth/TruthTracker.hh"
 
 #include "boost/foreach.hpp"
 
@@ -89,7 +92,8 @@ struct SVWriter
         const GSCOptions& initOpt,
         const SVLocusSet& cset,
         const char* progName,
-        const char* progVersion) :
+        const char* progVersion,
+        TruthTracker& truthTracker) :
         opt(initOpt),
         isSomatic(! opt.somaticOutputFilename.empty()),
         svScore(opt, cset.header),
@@ -100,7 +104,8 @@ struct SVWriter
         diploidWriter(opt.diploidOpt, (! opt.chromDepthFilename.empty()),
                       opt.referenceFilename,cset,dipfs.getStream()),
         somWriter(opt.somaticOpt, (! opt.chromDepthFilename.empty()),
-                  opt.referenceFilename,cset,somfs.getStream())
+                  opt.referenceFilename,cset,somfs.getStream()),
+        _truthTracker(truthTracker)
     {
         if (0 == opt.edgeOpt.binIndex)
         {
@@ -117,32 +122,36 @@ struct SVWriter
         const SVCandidateAssemblyData& assemblyData,
         const SVCandidate& sv)
     {
-        static const unsigned minCandidatePairCount(3);
+        static const unsigned minCandidateSpanningCount(3);
 
-        const bool isSelfEdge(edge.nodeIndex1 == edge.nodeIndex2);
+        const bool isCandidateSpanning(assemblyData.isSpanning);
 
 #ifdef DEBUG_GSV
-        static const std::string logtag("SVWriter::writeSV");
-        log_os << logtag << " isSelfEdge: " <<  isSelfEdge << "\n";
+        static const std::string logtag("SVWriter::writeSV: ");
+        log_os << logtag << "isSpanningSV: " <<  isCandidateSpanning << "\n";
 #endif
 
-        if (isSelfEdge)
+        if (! isCandidateSpanning)
         {
             if (sv.isImprecise())
             {
+                // in this case a non-spanning low-res candidate went into assembly but
+                // did not produce a successful contig alignment:
 #ifdef DEBUG_GSV
-                log_os << logtag << " rejecting candidate: imprecise self-edge\n";
+                log_os << logtag << "Rejecting candidate: imprecise non-spanning SV\n";
 #endif
+                _truthTracker.reportOutcome(SVLog::IMPRECISE_NON_SPANNING);
                 return;
             }
         }
         else
         {
-            if (sv.bp1.getPairCount() < minCandidatePairCount)
+            if (sv.bp1.getSpanningCount() < minCandidateSpanningCount)
             {
 #ifdef DEBUG_GSV
-                log_os << logtag << " rejecting candidate: minCandidatePairCount\n";
+                log_os << logtag << "Rejecting candidate: minCandidateSpanningCount\n";
 #endif
+                _truthTracker.reportOutcome(SVLog::LOW_SPANNING_COUNT);
                 return;
             }
         }
@@ -151,7 +160,7 @@ struct SVWriter
         if (isSVBelowMinSize(sv,opt.scanOpt.minCandidateVariantSize))
         {
 #ifdef DEBUG_GSV
-            log_os << logtag << " filtering out candidate below min size before candidate output stage\n";
+            log_os << logtag << "Filtering out candidate below min size before candidate output stage\n";
 #endif
             return;
         }
@@ -162,7 +171,7 @@ struct SVWriter
         if (isSVBelowMinSize(sv,opt.minScoredVariantSize))
         {
 #ifdef DEBUG_GSV
-            log_os << logtag << " filtering out candidate below min size at scoring stage\n";
+            log_os << logtag << "Filtering out candidate below min size at scoring stage\n";
 #endif
             return;
         }
@@ -179,6 +188,11 @@ struct SVWriter
             if (modelScoreInfo.somatic.somaticScore > opt.somaticOpt.minOutputSomaticScore)
             {
                 somWriter.writeSV(edge, svData, assemblyData, sv, modelScoreInfo);
+                _truthTracker.reportOutcome(SVLog::WRITTEN);
+            }
+            else
+            {
+                _truthTracker.reportOutcome(SVLog::LOW_SOMATIC_SCORE);
             }
         }
     }
@@ -197,6 +211,8 @@ struct SVWriter
     VcfWriterCandidateSV candWriter;
     VcfWriterDiploidSV diploidWriter;
     VcfWriterSomaticSV somWriter;
+
+    TruthTracker& _truthTracker;
 };
 
 
@@ -242,7 +258,9 @@ runGSC(
     std::auto_ptr<EdgeRetriever> edgerPtr(edgeRFactory(cset, opt.edgeOpt));
     EdgeRetriever& edger(*edgerPtr);
 
-    SVWriter svWriter(opt, cset, progName, progVersion);
+    TruthTracker truthTracker(opt.truthVcfFilename, cset);;
+
+    SVWriter svWriter(opt, cset, progName, progVersion, truthTracker);
 
     SVCandidateSetData svData;
     std::vector<SVCandidate> svs;
@@ -258,6 +276,7 @@ runGSC(
     while (edger.next())
     {
         const EdgeInfo& edge(edger.getEdge());
+        truthTracker.addEdge(edge);
 
         if (opt.edgeOpt.isNodeIndex1)
         {
@@ -297,6 +316,8 @@ runGSC(
             // find number, type and breakend range (or better: breakend distro) of SVs on this edge:
             svFind.findCandidateSV(chromToIndex, edge, opt.referenceFilename, svData, svs);
 
+            truthTracker.reportNumCands(svs.size(), edge);
+
             if (opt.isVerbose)
             {
                 log_os << logtag << " Low-resolution candidate generation complete. Candidate count: " << svs.size() << "\n";
@@ -304,6 +325,8 @@ runGSC(
 
             BOOST_FOREACH(const SVCandidate& candidateSV, svs)
             {
+                truthTracker.addCandSV();
+
                 if (opt.isVerbose)
                 {
                     log_os << logtag << " Starting analysis of low-resolution candidate: " << candidateSV.candidateIndex << "\n";
@@ -329,11 +352,15 @@ runGSC(
                     log_os << logtag << " score and output low-res candidate\n";
 #endif
                     svWriter.writeSV(edge, svData, assemblyData, candidateSV);
+
                 }
                 else
                 {
+                    truthTracker.reportNumAssembled(assemblyData.svs.size());
+
                     BOOST_FOREACH(const SVCandidate& assembledSV, assemblyData.svs)
                     {
+                        truthTracker.addAssembledSV();
 #ifdef DEBUG_GSV
                         log_os << logtag << " score and output assembly candidate: " << assembledSV << "\n";
 #endif
@@ -363,6 +390,8 @@ runGSC(
             log_os << logtag << " Processing this edge took " << elapsedSec << " seconds.\n";
         }
     }
+
+    truthTracker.dumpAll();
 }
 
 

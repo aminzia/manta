@@ -154,5 +154,6 @@ add_subdirectory (cmake/preInstall)
 add_subdirectory (opt)
 add_subdirectory (c++)
 add_subdirectory (python)
+add_subdirectory (markdown)
 add_subdirectory (cmake/postInstall)
 

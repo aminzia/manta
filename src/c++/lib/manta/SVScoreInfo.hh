@@ -54,6 +54,17 @@ struct SVAlignmentInfo
         return (_isSpanning ? bp2RefSeq : bp1RefSeq);
     }
 
+    bool
+    isSpanning() const
+    {
+        return _isSpanning;
+    }
+
+    /// do we have a enough room on either side of the breakend for
+    /// both the ref and contig to make a fair split read evaluation?
+    bool
+    isMinBpEdge(const unsigned minEdge) const;
+
     friend
     std::ostream&
     operator<<(std::ostream& os, const SVAlignmentInfo& ai);
@@ -68,10 +79,11 @@ private:
     const bool _bp2ContigReversed;
 
 public:
-    unsigned bp1ContigOffset;
-    unsigned bp2ContigOffset;
-    unsigned bp1RefOffset;
-    unsigned bp2RefOffset;
+    /// all offsets correspond to the zero-indexed base immediately before the breakend on the fwd-strand
+    pos_t bp1ContigOffset;
+    pos_t bp2ContigOffset;
+    pos_t bp1RefOffset;
+    pos_t bp2RefOffset;
 };
 
 std::ostream&

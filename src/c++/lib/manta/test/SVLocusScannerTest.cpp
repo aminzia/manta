@@ -37,7 +37,7 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromReadIndels )
 
     ChromAlignment align(bamRead);
 
-    std::vector<SVCandidate> candidates;
+    std::vector<SVObservation> candidates;
 
     getSVCandidatesFromReadIndels(opt, dopt, align, candidates);
 
@@ -74,14 +74,11 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromSemiAligned )
     SimpleAlignment align(bamRead);
     align.pos = 500;
 
-    std::cout << align.path << std::endl;
-
-    std::vector<SVCandidate> candidates;
+    std::vector<SVObservation> candidates;
 
     getSVCandidatesFromSemiAligned(opt,bamRead,align,candidates,testRef);
 
     BOOST_REQUIRE_EQUAL(candidates.size(),1u);
-    std::cout << "candidates " << candidates[0].bp1.interval.range << std::endl;
     BOOST_REQUIRE(candidates[0].bp1.interval.range.is_pos_intersect(600));
     BOOST_REQUIRE_EQUAL(candidates[0].bp1.interval.range.begin_pos(),580);
     BOOST_REQUIRE_EQUAL(candidates[0].bp1.interval.range.end_pos(),620);

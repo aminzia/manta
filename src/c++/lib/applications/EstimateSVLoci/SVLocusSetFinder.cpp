@@ -180,27 +180,20 @@ update(const bam_record& bamRead,
     // shortcut to speed things up:
     if (_readScanner.isReadFiltered(bamRead)) return;
 
-    // don't rely on the properPair bit to be set correctly:
-    const bool isAnomalous(! _readScanner.isProperPair(bamRead,defaultReadGroupIndex));
-    const bool isLargeFragment(_readScanner.isLargeFragment(bamRead,defaultReadGroupIndex));
+    // exclude innie read pairs which are anomalously short:
+    const bool isNonShortAnomalous(_readScanner.isNonShortAnomalous(bamRead,defaultReadGroupIndex));
 
-    const bool isLargeAnomalous(isAnomalous && isLargeFragment);
-
-#ifdef DEBUG_SFINDER
-    log_os << bamRead.qname() << " isAnomalous=" << isAnomalous << " isLargeFragment=" << isLargeFragment << "\n";
-#endif
-
-    if (isLargeAnomalous) ++_anomCount;
-    else                  ++_nonAnomCount;
+    if (isNonShortAnomalous) ++_anomCount;
+    else                     ++_nonAnomCount;
 
     bool isLocalAssemblyEvidence(false);
-    if (! isLargeAnomalous)
+    if (! isNonShortAnomalous)
     {
         isLocalAssemblyEvidence = _readScanner.isLocalAssemblyEvidence(bamRead,bkptRef);
     }
     //std::cerr << bamRead.qname() << " isLargeAnomalous=" << isLargeAnomalous << " isLocalAssemblyEvidence=" << isLocalAssemblyEvidence << "\n";
 
-    if (! ( isLargeAnomalous || isLocalAssemblyEvidence))
+    if (! ( isNonShortAnomalous || isLocalAssemblyEvidence))
     {
         return; // this read isn't interesting wrt SV discovery
     }

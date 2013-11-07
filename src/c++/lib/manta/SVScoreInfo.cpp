@@ -18,6 +18,7 @@
 #include "manta/SVScoreInfo.hh"
 #include "blt_util/log.hh"
 #include "blt_util/seq_util.hh"
+#include "blt_util/seq_printer.hh"
 
 #include "boost/foreach.hpp"
 
@@ -43,8 +44,8 @@ SVAlignmentInfo(
         const JumpAlignmentResult<int>& alignment = assemblyData.spanningAlignments[sv.assemblyAlignIndex];
 
         // get offsets of breakpoints in the extended contig
-        const unsigned align1Size(apath_read_length(alignment.align1.apath));
-        const unsigned insertSize(alignment.jumpInsertSize);
+        const pos_t align1Size(apath_read_length(alignment.align1.apath));
+
         // the beginPos of align1 is the length of reference padding in the extended contig
         // |ref padding| + |align1| + |insert| + |align2|
         // both bp1 and bp2 include the insert and micro-homology,
@@ -54,8 +55,8 @@ SVAlignmentInfo(
         // deal with each breakpoint as a range instead of a point value
 
         //unsigned homologySize = sv.bp1.interval.range.size() - 1;
-        bp1ContigOffset = alignment.align1.beginPos + align1Size;
-        bp2ContigOffset = alignment.align1.beginPos + align1Size + insertSize;
+        bp1ContigOffset = alignment.align1.beginPos + align1Size -1;
+        bp2ContigOffset = bp1ContigOffset + alignment.jumpInsertSize;
         if (assemblyData.bporient.isBp2AlignedFirst)
         {
             std::swap(bp1ContigOffset, bp2ContigOffset);
@@ -65,10 +66,16 @@ SVAlignmentInfo(
         {
             revContigSeq = reverseCompCopyStr(contigSeq);
             // reset offset w.r.t. the reversed contig
+            // note this is -2 and not -1 because we're jumping to the other "side" of the breakend:
+            const pos_t revSize(contigSeq.size()-2);
             if (_bp1ContigReversed)
-                bp1ContigOffset = contigSeq.size() - bp1ContigOffset - 1;
+            {
+                bp1ContigOffset = revSize - bp1ContigOffset;
+            }
             else
-                bp2ContigOffset = contigSeq.size() - bp2ContigOffset - 1;
+            {
+                bp2ContigOffset = revSize - bp2ContigOffset;
+            }
         }
 
         // get reference regions
@@ -104,8 +111,8 @@ SVAlignmentInfo(
         // csaunders: removing microhomology
 
 //        unsigned homologySize = sv.bp1.interval.range.size() - 1;
-        bp1ContigOffset = alignment.align.beginPos + apath_read_length(apathTillSvStart);
-        bp2ContigOffset = alignment.align.beginPos + apath_read_length(apathTillSvEnd);
+        bp1ContigOffset = alignment.align.beginPos + apath_read_length(apathTillSvStart) - 1;
+        bp2ContigOffset = alignment.align.beginPos + apath_read_length(apathTillSvEnd) - 1;
 
         // get reference regions
         // only bp1ref is used for small events
@@ -121,18 +128,63 @@ SVAlignmentInfo(
 
 
 
+bool
+SVAlignmentInfo::
+isMinBpEdge(
+    const unsigned minEdge) const
+{
+    const int iminEdge(minEdge);
+    if ((bp1ContigOffset+1) < iminEdge) return false;
+    if ((bp2ContigOffset+1) < iminEdge) return false;
+    if ((bp1RefOffset+1) < iminEdge) return false;
+    if ((bp2RefOffset+1) < iminEdge) return false;
+
+    const pos_t contigBpSize(contigSeq.size()-1);
+    if ((contigBpSize - bp1ContigOffset) < iminEdge) return false;
+    if ((contigBpSize - bp2ContigOffset) < iminEdge) return false;
+
+    const pos_t bp1RefSize(bp1ReferenceSeq().size());
+    if ((bp1RefSize - 1 - bp1RefOffset) < iminEdge) return false;
+
+    const pos_t bp2RefSize(bp2ReferenceSeq().size());
+    if ((bp2RefSize - 1 - bp2RefOffset) < iminEdge) return false;
+
+    return true;
+}
+
+
+
+static
+void
+dumpSeq(
+    const char* label,
+    const std::string& seq,
+    std::ostream& os)
+{
+    os << label << " size/seq: " << seq.size() << '\n';
+    printSeq(seq,os);
+    os << '\n';
+}
+
+
+
 std::ostream&
 operator<<(
     std::ostream& os,
     const SVAlignmentInfo& ai)
 {
-    os << "Contig seq\n" << ai.contigSeq << "\n";
-    os << "bp1 contig offset = " << ai.bp1ContigOffset << " bp1 contig reversed = " << ai._bp1ContigReversed << "\n";
-    os << "bp2 contig offset = " << ai.bp2ContigOffset << " bp2 contig reversed = " << ai._bp2ContigReversed << "\n";
-    os << "bp1RefSeq\n" << ai.bp1RefSeq << "\n";
-    os << "bp2RefSeq (null for small SVs)\n" << ai.bp2RefSeq << "\n";
-    os << "bp1 reference offset = " << ai.bp1RefOffset << "\n";
-    os << "bp2 reference offset = " << ai.bp2RefOffset << "\n";
+    os << "SVAlignmentInfo: isSpanning: " << ai.isSpanning() << '\n';
+    dumpSeq("Contig",ai.contigSeq,os);
+    dumpSeq("Rev Contig",ai.revContigSeq,os);
+    os << "bp1 contig offset = " << ai.bp1ContigOffset << " bp1 contig reversed = " << ai._bp1ContigReversed << '\n';
+    os << "bp2 contig offset = " << ai.bp2ContigOffset << " bp2 contig reversed = " << ai._bp2ContigReversed << '\n';
+    dumpSeq("bp1RefSeq",ai.bp1RefSeq,os);
+    if (ai.isSpanning())
+    {
+        dumpSeq("bp2RefSeq",ai.bp2RefSeq,os);
+    }
+    os << "bp1 reference offset = " << ai.bp1RefOffset << '\n';
+    os << "bp2 reference offset = " << ai.bp2RefOffset << '\n';
     return os;
 }
 
@@ -145,12 +197,12 @@ operator<<(
 {
     static const char indent('\t');
     os << "SVSampleAlleleInfo:\n"
-       << indent << "bp1SpanReadCount: " << sai.bp1SpanReadCount << "\n"
-       << indent << "bp2SpanReadCount: " << sai.bp2SpanReadCount << "\n"
-       << indent << "spanPairCount: " << sai.spanPairCount << "\n"
-       << indent << "confidentSpanningPairCount: " << sai.confidentSpanningPairCount << "\n"
-       << indent << "splitReadCount: " << sai.splitReadCount << "\n"
-       << indent << "confidentSplitReadCount: " << sai.confidentSplitReadCount << "\n"
+       << indent << "bp1SpanReadCount: " << sai.bp1SpanReadCount << '\n'
+       << indent << "bp2SpanReadCount: " << sai.bp2SpanReadCount << '\n'
+       << indent << "spanPairCount: " << sai.spanPairCount << '\n'
+       << indent << "confidentSpanningPairCount: " << sai.confidentSpanningPairCount << '\n'
+       << indent << "splitReadCount: " << sai.splitReadCount << '\n'
+       << indent << "confidentSplitReadCount: " << sai.confidentSplitReadCount << '\n'
        ;
     return os;
 }
@@ -176,7 +228,8 @@ operator<<(
     std::ostream& os,
     const SVScoreInfo& ssi)
 {
-    os << "SVScoreInfo bp1MaxDepth=" << ssi.bp1MaxDepth << " bp2MaxDepth=" << ssi.bp2MaxDepth << "\n";
+    os << "SVScoreInfo bp1MaxDepth=" << ssi.bp1MaxDepth << " bp2MaxDepth=" << ssi.bp2MaxDepth << '\n';
     os << "Normal sample info " << ssi.normal;
     return os;
 }
+

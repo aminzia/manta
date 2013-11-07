@@ -10,15 +10,19 @@
 # <https://github.com/sequencing/licenses/>
 #
 
-include ("${MANTA_GLOBALS_CMAKE}")
+set(INSTALL_TO_DIR "${MANTA_BINDIR}")
 
-install(CODE "
-    include (\"${MANTA_MACROS_CMAKE}\")
-    configure_files (\"${CMAKE_CURRENT_SOURCE_DIR}\" \"${CMAKE_CURRENT_BINARY_DIR}\" \"*.py\")
-    install_files (\"${CMAKE_CURRENT_BINARY_DIR}\" \"\${MANTA_FULL_BINDIR}\" \"*.py\"
-                   \"\${MANTA_EXECUTABLE_PERMISSIONS}\")
-    configure_files (\"${CMAKE_CURRENT_SOURCE_DIR}\" \"${CMAKE_CURRENT_BINARY_DIR}\" \"*.ini\")
-    install_files (\"${CMAKE_CURRENT_BINARY_DIR}\" \"\${MANTA_FULL_BINDIR}\" \"*.ini\"
-                   \"\${MANTA_LIBRARY_PERMISSIONS}\")
-    ")
+file(RELATIVE_PATH MANTA_RELATIVE_PYTHON_LIBDIR "${INSTALL_TO_DIR}" "${MANTA_PYTHON_LIBDIR}")
+
+include ("${MANTA_MACROS_CMAKE}")
+
+configure_files("${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}" "*.py")
+configure_files("${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}" "*.ini")
+
+include("${MANTA_GLOBALS_CMAKE}") # required for *_PERMISSIONS values
+
+install_fileglob("${CMAKE_CURRENT_BINARY_DIR}" "${INSTALL_TO_DIR}" "*.py"
+                 "${MANTA_EXECUTABLE_PERMISSIONS}")
+install_fileglob("${CMAKE_CURRENT_BINARY_DIR}" "${INSTALL_TO_DIR}" "*.ini"
+                 "${MANTA_LIBRARY_PERMISSIONS}")
 

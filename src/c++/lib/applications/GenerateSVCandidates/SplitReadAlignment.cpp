@@ -18,6 +18,7 @@
 #include "SplitReadAlignment.hh"
 #include "blt_util/log.hh"
 #include "blt_util/blt_types.hh"
+#include "common/Exceptions.hh"
 
 #include <cassert>
 #include <cmath>
@@ -36,7 +37,8 @@ operator<<(std::ostream& os, const SRAlignmentInfo& info)
        << " alignScore=" << info.alignScore
        << " isEvidence: " << info.isEvidence
        << " evidence: " << info.evidence
-       << "\n";
+       << " alignLnLhood: "  << info.alignLnLhood
+       << '\n';
     return os;
 }
 
@@ -146,7 +148,7 @@ setEvidence(
     //
 
     // adding new flank size threshold -- this might have to be changed based on sv size:
-    static const unsigned minFlankSize(20);
+    static const unsigned minFlankSize(16);
     if (alignment.leftSize < minFlankSize) return;
     if (alignment.rightSize < minFlankSize) return;
 
@@ -169,20 +171,33 @@ splitReadAligner(
     const unsigned targetBpBeginPos,
     SRAlignmentInfo& alignment)
 {
+    using namespace illumina::common;
+
     const unsigned querySize = querySeq.size();
     const unsigned targetSize = targetSeq.size();
-    assert(targetSize != 0);
+    if (querySize >= targetSize)
+    {
+        std::ostringstream oss;
+        oss << "ERROR: Unexpected split read alignment input."
+            << " querySize: " << querySize << " targetSize: " << targetSize << '\n'
+            << "\tquerySeq: " << querySeq << '\n'
+            << "\ttargetSeq: " << targetSeq << '\n';
+        BOOST_THROW_EXCEPTION(LogicException(oss.str()));
 
+    }
     /// TODO: rerig things to use end_pos() as well
 
     // set the scanning start & end to make sure the candidate windows overlapping the breakpoint
     const unsigned scanStart(std::max(0, static_cast<pos_t>(targetBpBeginPos) - static_cast<pos_t>(querySize) + 2));
-    const unsigned scanEnd(std::max(0, std::min((static_cast<pos_t>(targetBpBeginPos)-1), static_cast<pos_t>(targetSize - querySize)) ));
+    const unsigned scanEnd(std::max(0, std::min((static_cast<pos_t>(targetBpBeginPos)), static_cast<pos_t>(targetSize - querySize))));
 
 #ifdef DEBUG_SRA
-    log_os << "query size = " << querySize << "target size = " << targetSize << "\n";
-    log_os << "scan start = " << scanStart << " scan end = " << scanEnd << "\n";
+    static const std::string logtag("splitReadAligner: ");
+    log_os << logtag << "query size = " << querySize << " target size = " << targetSize << '\n';
+    log_os << logtag << "targetBeginPos = " << targetBpBeginPos << '\n';
+    log_os << logtag << "scan start = " << scanStart << " scan end = " << scanEnd << '\n';
 #endif
+    assert(scanEnd>=scanStart);
 
     const std::string::const_iterator scanWindowBegin(targetSeq.begin());
     const std::string::const_iterator scanWindowEnd(targetSeq.end());
@@ -197,6 +212,9 @@ splitReadAligner(
             const float lnLhood(getLnLhood(querySeq, qualConvert, queryQual,
                                            scanWindowBegin+i, scanWindowEnd, isBest, bestLnLhood));
 
+#ifdef DEBUG_SRA
+            log_os << logtag << "scanning: " << i << " lhood: " << lnLhood << " bestLnLhood " << bestLnLhood << " isBest " << isBest << " bestPos " << bestPos << '\n';
+#endif
             if ( (! isBest) || (lnLhood > bestLnLhood))
             {
                 bestLnLhood = lnLhood;
@@ -204,11 +222,20 @@ splitReadAligner(
                 isBest=true;
             }
         }
+        assert(isBest);
     }
 
     assert(bestPos <= (targetBpBeginPos+1));
     alignment.leftSize = static_cast<pos_t>(targetBpBeginPos+1) - bestPos;
-    assert(alignment.leftSize <= querySize);
+    if (alignment.leftSize > querySize)
+    {
+        std::ostringstream oss;
+        oss << "ERROR: Unexpected split read alignment outcome. "
+            << " targetBeginPos: " << targetBpBeginPos << " bestPos: " << bestPos << " querySize: " << querySize << " targetSize: " << targetSize << '\n'
+            << "\tquerySeq: " << querySeq << '\n'
+            << "\ttargetSeq: " << targetSeq << '\n';
+        BOOST_THROW_EXCEPTION(LogicException(oss.str()));
+    }
     alignment.rightSize= querySize - alignment.leftSize;
     alignment.alignLnLhood = bestLnLhood;
     alignment.alignPos = bestPos;
@@ -219,6 +246,6 @@ splitReadAligner(
     setEvidence(alignment);
 
 #ifdef DEBUG_SRA
-    log_os << "final alignment\n" << alignment << "\n";
+    log_os << logtag << "bestpos: " << bestPos << " final alignment\n" << alignment << "\n";
 #endif
 }

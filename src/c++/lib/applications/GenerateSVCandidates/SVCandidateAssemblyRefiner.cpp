@@ -32,6 +32,11 @@
 //#define DEBUG_REFINER
 
 
+#ifdef DEBUG_REFINER
+#include "blt_util/seq_printer.hh"
+#endif
+
+
 
 /// process assembly/align info into simple reference coordinates that can be reported in the output vcf:
 ///
@@ -428,8 +433,8 @@ getCandidateAssemblyData(
     SVCandidateAssemblyData& assemblyData) const
 {
 #ifdef DEBUG_REFINER
-    static const std::string logtag("getCandidateAssemblyData");
-    log_os << logtag << " START sv: " << sv;
+    static const std::string logtag("getCandidateAssemblyData: ");
+    log_os << logtag << "START sv: " << sv;
 #endif
 
     assemblyData.clear();
@@ -462,13 +467,18 @@ getJumpAssembly(
     SVCandidateAssemblyData& assemblyData) const
 {
 #ifdef DEBUG_REFINER
-    static const std::string logtag("getJumpAssembly");
-    log_os << logtag << " START\n";
+    static const std::string logtag("getJumpAssembly: ");
+    log_os << logtag << "START\n";
 #endif
 
     // how much additional reference sequence should we extract from around
-    // each side of the breakend region?
-    static const pos_t extraRefEdgeSize(200);
+    // each side of the breakend region for alignment purposes?
+    static const pos_t extraRefEdgeSize(250);
+
+    // how much reference should we additionally extract for split read alignment, but not for variant-discovery alignment?
+    static const pos_t extraRefSplitSize(100);
+
+    static const pos_t extraRefSize(extraRefEdgeSize+extraRefSplitSize);
 
     // if the breakends have a simple insert/delete orientation and the alignment regions overlap, then handle this case as
     // a local assembly problem:
@@ -479,7 +489,7 @@ getJumpAssembly(
             const SV_TYPE::index_t svType(getSVType(sv));
             if ((svType == SV_TYPE::INDEL) || (svType == SV_TYPE::COMPLEX))
             {
-                if ( isRefRegionOverlap( _header,extraRefEdgeSize,sv) )
+                if ( isRefRegionOverlap( _header, extraRefSize, sv) )
                 {
                     // transform SV into a single region format:
                     SVCandidate singleSV = sv;
@@ -488,7 +498,7 @@ getJumpAssembly(
                     singleSV.bp1.interval.range.merge_range(sv.bp2.interval.range);
 
 #ifdef DEBUG_REFINER
-                    log_os << logtag << " candidate breakends regions are too close, transferring problem to local assembler\n";
+                    log_os << logtag << "Candidate breakends regions are too close, transferring problem to local assembler\n";
 #endif
 
                     getSmallSVAssembly(singleSV, assemblyData);
@@ -543,34 +553,64 @@ getJumpAssembly(
 
     //std::cout << "chrom length=" << chromInfo1.length << " " << chromInfo2.length << std::endl;
 
-    getSVReferenceSegments(_opt.referenceFilename, _header, sv, beginPos1, endPos1, beginPos2, endPos2, assemblyData.bp1ref, assemblyData.bp2ref);
+    //getSVReferenceSegments(_opt.referenceFilename, _header, sv, beginPos1, endPos1, beginPos2, endPos2, assemblyData.bp1ref, assemblyData.bp2ref);
 
     // assemble contig spanning the breakend:
     _spanningAssembler.assembleSVBreakends(sv.bp1, sv.bp2, bporient.isBp1Reversed, bporient.isBp2Reversed, assemblyData.contigs, assemblyData.bp1ref.seq(), beginPos1, assemblyData.bp2ref.seq(), beginPos2);
 
+    unsigned bp1LeadingTrim;
+    unsigned bp1TrailingTrim;
+    unsigned bp2LeadingTrim;
+    unsigned bp2TrailingTrim;
+    getSVReferenceSegments(_opt.referenceFilename, _header, extraRefSize, sv, beginPos1, endPos1, beginPos2, endPos2, assemblyData.bp1ref, assemblyData.bp2ref,
+                           bp1LeadingTrim, bp1TrailingTrim, bp2LeadingTrim, bp2TrailingTrim);
+
+    pos_t align1LeadingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(bp1LeadingTrim)));
+    pos_t align1TrailingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(bp1TrailingTrim)));
+    pos_t align2LeadingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(bp2LeadingTrim)));
+    pos_t align2TrailingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(bp2TrailingTrim)));
+
     std::string bp1refSeq = assemblyData.bp1ref.seq();
     std::string bp2refSeq = assemblyData.bp2ref.seq();
-    if (bporient.isBp1Reversed) reverseCompStr(bp1refSeq);
-    if (bporient.isBp2Reversed) reverseCompStr(bp2refSeq);
-
+    if (bporient.isBp1Reversed)
+    {
+        reverseCompStr(bp1refSeq);
+        std::swap(align1LeadingCut, align1TrailingCut);
+    }
+    if (bporient.isBp2Reversed)
+    {
+        reverseCompStr(bp2refSeq);
+        std::swap(align2LeadingCut, align2TrailingCut);
+  }
+//>>>>>>> master
     const std::string* align1RefStrPtr(&bp1refSeq);
     const std::string* align2RefStrPtr(&bp2refSeq);
 
-    if (bporient.isBp2AlignedFirst) std::swap(align1RefStrPtr, align2RefStrPtr);
+    if (bporient.isBp2AlignedFirst)
+    {
+        std::swap(align1RefStrPtr, align2RefStrPtr);
+
+        std::swap(align1LeadingCut, align2LeadingCut);
+        std::swap(align1TrailingCut, align2TrailingCut);
+    }
 
 #ifdef DEBUG_REFINER
-    log_os << logtag << " al1Ref: " << *align1RefStrPtr << "\n";
-    log_os << logtag << " al2Ref: " << *align2RefStrPtr << "\n";
+    log_os << logtag << "al1RefSize/Seq: " << align1RefStrPtr->size() << '\n';
+    printSeq(*align1RefStrPtr,log_os);
+    log_os << '\n';
+    log_os << logtag << "al2Refsize/Seq: " << align2RefStrPtr->size() << '\n';
+    printSeq(*align2RefStrPtr,log_os);
+    log_os << '\n';
 #endif
 
     const unsigned contigCount(assemblyData.contigs.size());
 
 #ifdef DEBUG_REFINER
-    log_os << logtag << " contigCount: " << contigCount << "\n";
+    log_os << logtag << "contigCount: " << contigCount << "\n";
     for (unsigned contigIndex(0); contigIndex<contigCount; ++contigIndex)
     {
         const AssembledContig& contig(assemblyData.contigs[contigIndex]);
-        log_os << logtag << " contigIndex: " << contigIndex << " contig: " << contig;
+        log_os << logtag << "contigIndex: " << contigIndex << " contig: " << contig;
     }
 #endif
 
@@ -585,23 +625,26 @@ getJumpAssembly(
         const AssembledContig& contig(assemblyData.contigs[contigIndex]);
 
 #ifdef DEBUG_REFINER
-        log_os << logtag << " start aligning contigIndex: " << contigIndex << "\n";
+        log_os << logtag << "start aligning contigIndex: " << contigIndex << "\n";
 #endif
 
         JumpAlignmentResult<int>& alignment(assemblyData.spanningAlignments[contigIndex]);
 
         _spanningAligner.align(
             contig.seq.begin(), contig.seq.end(),
-            align1RefStrPtr->begin(), align1RefStrPtr->end(),
-            align2RefStrPtr->begin(), align2RefStrPtr->end(),
+            align1RefStrPtr->begin() + align1LeadingCut, align1RefStrPtr->end() - align1TrailingCut,
+            align2RefStrPtr->begin() + align2LeadingCut, align2RefStrPtr->end() - align2TrailingCut,
             alignment);
 
+        alignment.align1.beginPos += align1LeadingCut;
+        alignment.align2.beginPos += align2LeadingCut;
+
         std::string extendedContig;
-        getExtendedContig(alignment, contig.seq, align1RefStrPtr, align2RefStrPtr, extendedContig);
+        getExtendedContig(alignment, contig.seq, *align1RefStrPtr, *align2RefStrPtr, extendedContig);
         assemblyData.extendedContigs.push_back(extendedContig);
 
 #ifdef DEBUG_REFINER
-        log_os << logtag << " contigIndex: " << contigIndex << " alignment: " << alignment;
+        log_os << logtag << "contigIndex: " << contigIndex << " alignment: " << alignment;
 
         std::string bp1Seq,bp2Seq,insertSeq;
         getFwdStrandQuerySegments(alignment, contig.seq,
@@ -646,7 +689,7 @@ getJumpAssembly(
     {
         assemblyData.bestAlignmentIndex = highScoreIndex;
 #ifdef DEBUG_REFINER
-        log_os << logtag << " highscoreid: " << highScoreIndex << " alignment: " << assemblyData.spanningAlignments[highScoreIndex];
+        log_os << logtag << "highscoreid: " << highScoreIndex << " alignment: " << assemblyData.spanningAlignments[highScoreIndex];
 #endif
 
         // process the alignment into information that's easily usable in the vcf output
@@ -683,7 +726,7 @@ getJumpAssembly(
         addCigarToSpanningAlignment(newSV);
 
 #ifdef DEBUG_REFINER
-        log_os << logtag << " highscore refined sv: " << newSV;
+        log_os << logtag << "highscore refined sv: " << newSV;
 #endif
     }
 }
@@ -697,8 +740,8 @@ getSmallSVAssembly(
     SVCandidateAssemblyData& assemblyData) const
 {
 #ifdef DEBUG_REFINER
-    static const std::string logtag("getSmallSVAssembly");
-    log_os << logtag << " START\n";
+    static const std::string logtag("getSmallSVAssembly: ");
+    log_os << logtag << "START\n";
 #endif
 
     assemblyData.isSpanning = false;
@@ -707,11 +750,22 @@ getSmallSVAssembly(
     // each side of the breakend region?
     static const pos_t extraRefEdgeSize(700);
 
+    // how much reference should we additionally extract for split read alignment, but not for variant-discovery alignment?
+    static const pos_t extraRefSplitSize(100);
+
+    static const pos_t extraRefSize(extraRefEdgeSize+extraRefSplitSize);
+
     // min alignment context
     //const unsigned minAlignContext(4);
 
-    getIntervalReferenceSegment(_opt.referenceFilename, _header, /*extraRefEdgeSize,*/ sv.bp1.interval, assemblyData.bp1ref);
-    const std::string* align1RefStrPtr(&assemblyData.bp1ref.seq());
+    unsigned leadingTrim;
+    unsigned trailingTrim;
+    getIntervalReferenceSegment(_opt.referenceFilename, _header, extraRefSize, sv.bp1.interval, assemblyData.bp1ref, leadingTrim, trailingTrim);
+
+    const pos_t leadingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(leadingTrim)));
+    const pos_t trailingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(trailingTrim)));
+
+    const std::string& align1RefStr(assemblyData.bp1ref.seq());
 
     // assemble contigs in the breakend region
 
@@ -721,17 +775,19 @@ getSmallSVAssembly(
     _smallSVAssembler.assembleSingleSVBreakend(sv.bp1, assemblyData.contigs, assemblyData.bp1ref.seq(), beginPos);
 
 #ifdef DEBUG_REFINER
-    log_os << logtag << " al1Ref: " << *align1RefStrPtr << "\n";
+    log_os << logtag << "align1RefSize/Seq: " << align1RefStr.size() << '\n';
+    printSeq(align1RefStr,log_os);
+    log_os << '\n';
 #endif
 
     const unsigned contigCount(assemblyData.contigs.size());
 
 #ifdef DEBUG_REFINER
-    log_os << logtag << " contigCount: " << contigCount << "\n";
+    log_os << logtag << "contigCount: " << contigCount << '\n';
     for (unsigned contigIndex(0); contigIndex<contigCount; ++contigIndex)
     {
         const AssembledContig& contig(assemblyData.contigs[contigIndex]);
-        log_os << logtag << " contigIndex: " << contigIndex << " contig: " << contig;
+        log_os << logtag << "contigIndex: " << contigIndex << " contig: " << contig;
     }
 #endif
 
@@ -747,18 +803,20 @@ getSmallSVAssembly(
         const AssembledContig& contig(assemblyData.contigs[contigIndex]);
 
 #ifdef DEBUG_REFINER
-        log_os << logtag << " start aligning contigIndex: " << contigIndex << "\n";
+        log_os << logtag << "start aligning contigIndex: " << contigIndex << '\n';
 #endif
 
         AlignmentResult<int>& alignment(assemblyData.smallSVAlignments[contigIndex]);
 
         _smallSVAligner.align(
             contig.seq.begin(), contig.seq.end(),
-            align1RefStrPtr->begin(), align1RefStrPtr->end(),
+            align1RefStr.begin() + leadingCut, align1RefStr.end() - trailingCut,
             alignment);
 
+        alignment.align.beginPos += leadingCut;
+
         std::string extendedContig;
-        getExtendedContig(alignment, contig.seq, align1RefStrPtr, extendedContig);
+        getExtendedContig(alignment, contig.seq, align1RefStr, extendedContig);
         assemblyData.extendedContigs.push_back(extendedContig);
 
         // remove candidate from consideration unless we find a sufficiently large indel with good flanking sequence:
@@ -766,7 +824,7 @@ getSmallSVAssembly(
         const bool isFilterSmallSV( isFilterSmallSVAlignment(_smallSVAligner, alignment.align.apath, _opt.scanOpt.minCandidateVariantSize, candidateSegments));
 
 #ifdef DEBUG_REFINER
-        log_os << logtag << " contigIndex: " << contigIndex << " isFilter " << isFilterSmallSV << " alignment: " << alignment;
+        log_os << logtag << "contigIndex: " << contigIndex << " isFilter " << isFilterSmallSV << " alignment: " << alignment;
 #endif
 
         if (isFilterSmallSV) continue;
@@ -777,7 +835,7 @@ getSmallSVAssembly(
         if ((! isHighScore) || (alignment.score > assemblyData.smallSVAlignments[highScoreIndex].score))
         {
 #ifdef DEBUG_REFINER
-            log_os << logtag << " contigIndex: " << contigIndex << " is high score\n";
+            log_os << logtag << "contigIndex: " << contigIndex << " is high score\n";
 #endif
             isHighScore = true;
             highScoreIndex=contigIndex;
@@ -794,7 +852,7 @@ getSmallSVAssembly(
     {
         assemblyData.bestAlignmentIndex = highScoreIndex;
 #ifdef DEBUG_REFINER
-        log_os << logtag << " highscoreid: " << highScoreIndex << " alignment: " << assemblyData.smallSVAlignments[highScoreIndex];
+        log_os << logtag << "highscoreid: " << highScoreIndex << " alignment: " << assemblyData.smallSVAlignments[highScoreIndex];
 #endif
 
         // process the alignment into information that's easily usable in the vcf output

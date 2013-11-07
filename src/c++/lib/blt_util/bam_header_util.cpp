@@ -82,3 +82,4 @@ parse_bam_region(
     if (1 == words2.size()) return;
     end_pos = (illumina::blt_util::parse_int_str(words2[1]));
 }
+

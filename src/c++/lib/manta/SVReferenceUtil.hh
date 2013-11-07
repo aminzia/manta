@@ -47,6 +47,26 @@ getIntervalReferenceSegment(
     reference_contig_segment& intervalRef);
 
 void
+getIntervalReferenceSegment(
+    const std::string& referenceFilename,
+    const bam_header_info& header,
+    const pos_t extraRefEdgeSize,
+    const GenomeInterval& interval,
+    reference_contig_segment& intervalRef,
+    unsigned& leadingTrim,
+    unsigned& trailingTrim);
+
+
+void
+getIntervalReferenceSegment(
+    const std::string& referenceFilename,
+    const bam_header_info& header,
+    const GenomeInterval& interval,
+    reference_contig_segment& intervalRef,
+    unsigned& leadingTrim,
+    unsigned& trailingTrim);
+
+void
 getReference(
     const std::string& referenceFilename,
     const bam_header_info& header,
@@ -63,10 +83,19 @@ void
 getSVReferenceSegments(
     const std::string& referenceFilename,
     const bam_header_info& header,
+    const pos_t extraRefEdgeSize,
     const SVCandidate& sv,
     const pos_t beginPos1,
     const pos_t endPos1,
     const pos_t beginPos2,
     const pos_t endPos2,
     reference_contig_segment& bp1ref,
-    reference_contig_segment& bp2ref);
+    reference_contig_segment& bp2ref,
+    unsigned& bp1LeadingTrim,
+    unsigned& bp1TrailingTrim,
+    unsigned& bp2LeadingTrim,
+    unsigned& bp2TrailingTrim);
+
+
+
+
