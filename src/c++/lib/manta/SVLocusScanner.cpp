@@ -527,7 +527,6 @@ isSemiAligned(const bam_record& bamRead, const std::string& qrySeq,
     //}
     return (semiAlignedScore>minSemiAlignedScore);
 }
-#endif
 
 
 bool

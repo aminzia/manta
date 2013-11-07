@@ -52,14 +52,14 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromSemiAligned )
     ReadScannerOptions opt;
 
     ALIGNPATH::path_t inputPath;
-    cigar_to_apath("56M44S",inputPath);
+    cigar_to_apath("100M",inputPath);
 
     bam_record bamRead;
     bam1_t* bamDataPtr(bamRead.get_data());
     edit_bam_cigar(inputPath,*bamDataPtr);
 
     static const char testSeq[] = "AACCCACAAACATCACACACATACCCGTAATATTTTCATTGACTGCATTAGATTCTTCTACAGTGCGTCTAAGAGTCCAGAGACCGACTTTTTTCTAAAA";
-    static const char testRef[] = "AACCCACAAACATCACACACATAACCGTAATATTTTCATTGACTGCCTGATATTCT";
+    static const char testRef[] = "AACCCACAAACATCACACACATACCCGTAATATTTTCATTGACTGCATTAGATTCTTCTACAGTGCGTCTAAGAGTCCAGAGACCGACTTTTGGGGGGGG";
 
     // initialize test qual array to all Q30's:
     static const unsigned seqSize((sizeof(testSeq)-1)/sizeof(char));
@@ -74,14 +74,17 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromSemiAligned )
     SimpleAlignment align(bamRead);
     align.pos = 500;
 
+    std::cout << align.path << std::endl;
+
     std::vector<SVCandidate> candidates;
 
     getSVCandidatesFromSemiAligned(opt,bamRead,align,candidates,testRef);
 
-    /*BOOST_REQUIRE_EQUAL(candidates.size(),1u);
-    BOOST_REQUIRE(candidates[0].bp1.interval.range.is_pos_intersect(500));
-    BOOST_REQUIRE_EQUAL(candidates[0].bp1.interval.range.begin_pos(),480);
-    BOOST_REQUIRE_EQUAL(candidates[0].bp1.interval.range.end_pos(),520);*/
+    BOOST_REQUIRE_EQUAL(candidates.size(),1u);
+    std::cout << "candidates " << candidates[0].bp1.interval.range << std::endl;
+    BOOST_REQUIRE(candidates[0].bp1.interval.range.is_pos_intersect(600));
+    BOOST_REQUIRE_EQUAL(candidates[0].bp1.interval.range.begin_pos(),580);
+    BOOST_REQUIRE_EQUAL(candidates[0].bp1.interval.range.end_pos(),620);
 }
 
 
