@@ -67,13 +67,17 @@ private:
         const SVLocus& locus,
         const NodeIndexType node1,
         const NodeIndexType node2,
-        const std::string& referenceFilename,
+        const GenomeInterval& searchInterval,
+        const reference_contig_segment& refSeq,
+        const bool isNode1,
         SVCandidateSetData& svData);
 
 
     void
     getCandidatesFromData(
         const std::map<std::string, int32_t>& chromToIndex,
+        const reference_contig_segment& refSeq1,
+        const reference_contig_segment& refSeq2,
         SVCandidateSetData& svData,
         std::vector<SVCandidate>& svs);
 

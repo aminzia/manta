@@ -120,7 +120,7 @@ runESL(const ESLOptions& opt)
         const bam_streamer& readStream(*bamStreams[current.sample_no]);
         const bam_record& read(*(readStream.get_record_ptr()));
 
-        locusFinder.update(read, current.sample_no, refSegment, chromToIndex);
+        locusFinder.update(read, current.sample_no, chromToIndex, refSegment);
     }
 
     // finished updating:
