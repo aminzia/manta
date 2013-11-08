@@ -20,12 +20,9 @@
 #include "SVLocusSetFinder.hh"
 
 #include "blt_util/bam_header_util.hh"
-#include "blt_util/align_path_bam_util.hh"
 #include "blt_util/input_stream_handler.hh"
 #include "blt_util/log.hh"
-
 #include "common/OutStream.hh"
-
 #include "manta/SVReferenceUtil.hh"
 
 #include "boost/foreach.hpp"
@@ -35,6 +32,8 @@
 #include <vector>
 
 //#define DEBUG_ESL
+
+
 
 static
 void
@@ -121,22 +120,7 @@ runESL(const ESLOptions& opt)
         const bam_streamer& readStream(*bamStreams[current.sample_no]);
         const bam_record& read(*(readStream.get_record_ptr()));
 
-        std::string ref;
-        {
-            ALIGNPATH::path_t apath;
-            bam_cigar_to_apath(read.raw_cigar(), read.n_cigar(), apath);
-            // apparently we need the -1 here
-            const int alPos(read.pos()-scanRegion.range.begin_pos()-1);
-            const int alLen(apath_ref_length(apath));
-            const int refSize(refSegment.seq().size());
-            if (alPos < 0 || (alPos+alLen) > refSize) continue;
-            ref = refSegment.seq().substr(alPos,alLen);
-#ifdef DEBUG_ESL
-            log_os << log_tag << " testing read= " << read.qname() << " apath=" << apath  << "\n";
-#endif
-        }
-
-        locusFinder.update(read,current.sample_no,ref,chromToIndex);
+        locusFinder.update(read, current.sample_no, refSegment, chromToIndex);
     }
 
     // finished updating:

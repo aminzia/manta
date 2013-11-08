@@ -172,7 +172,7 @@ void
 SVLocusSetFinder::
 update(const bam_record& bamRead,
        const unsigned defaultReadGroupIndex,
-       const std::string& bkptRef,
+       const reference_contig_segment& refSeq,
        const std::map<std::string, int32_t>& chromToIndex)
 {
     _isScanStarted=true;
@@ -189,7 +189,7 @@ update(const bam_record& bamRead,
     bool isLocalAssemblyEvidence(false);
     if (! isNonShortAnomalous)
     {
-        isLocalAssemblyEvidence = _readScanner.isLocalAssemblyEvidence(bamRead,bkptRef);
+        isLocalAssemblyEvidence = _readScanner.isLocalAssemblyEvidence(bamRead, refSeq);
     }
     //std::cerr << bamRead.qname() << " isLargeAnomalous=" << isLargeAnomalous << " isLocalAssemblyEvidence=" << isLocalAssemblyEvidence << "\n";
 
@@ -209,7 +209,7 @@ update(const bam_record& bamRead,
 
     std::vector<SVLocus> loci;
 
-    _readScanner.getSVLoci(bamRead, defaultReadGroupIndex, bkptRef, chromToIndex, loci);
+    _readScanner.getSVLoci(bamRead, defaultReadGroupIndex, refSeq, chromToIndex, loci);
 
     BOOST_FOREACH(const SVLocus& locus, loci)
     {

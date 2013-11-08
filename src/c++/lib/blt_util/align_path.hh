@@ -243,14 +243,6 @@ apath_read_lead_size(const path_t& apath);
 unsigned
 apath_read_trail_size(const path_t& apath);
 
-/// how much mismatching sequence  occurs before the last aligned base?
-unsigned
-apath_mismatch_lead_size(const path_t& apath);
-
-/// how much mismatching sequence  occurs after the last aligned base?
-unsigned
-apath_mismatch_trail_size(const path_t& apath);
-
 /// how much soft_clip occurs before the first aligned base?
 unsigned
 apath_soft_clip_lead_size(const path_t& apath);

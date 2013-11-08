@@ -71,26 +71,20 @@ getSVBreakendCandidateClip(
 void
 getSVBreakendCandidateSemiAligned(
     const bam_record& bamRead,
-    const std::string& refSeq,
+    const ALIGNPATH::path_t& apath,
+    const reference_contig_segment& refSeq,
     unsigned& leadingMismatchLen,
     unsigned& trailingMismatchLen,
     const uint8_t minQ = 20,
     const float minQFrac = 0.75);
 
 
-/// check bam record for semi-alignedness (number of mismatches/clipped bases weighted by their q-scores)
 bool
-isSemiAligned(
+isGoodShadow(
     const bam_record& bamRead,
-    const std::string& refSeq,
-    const double minSemiAlignedScore);
-
-
-bool
-isGoodShadow(const bam_record& bamRead,
-             const uint8_t lastMapq,
-             const std::string& lastQname,
-             const double minSingletonMapq);
+    const uint8_t lastMapq,
+    const std::string& lastQname,
+    const double minSingletonMapq);
 
 
 struct ReadScannerDerivOptions
@@ -168,7 +162,7 @@ struct SVLocusScanner
     bool
     isLocalAssemblyEvidence(
         const bam_record& bamRead,
-        const std::string& bkptRef) const;
+        const reference_contig_segment& refSeq) const;
 
     /// return zero to many SVLocus objects if the read supports any
     /// structural variant(s) (detectable by manta)
@@ -180,9 +174,8 @@ struct SVLocusScanner
     getSVLoci(
         const bam_record& bamRead,
         const unsigned defaultReadGroupIndex,
-        //std::vector<SVLocus>& loci,
-        const std::string& bkptRef,
         const std::map<std::string, int32_t>& chromToIndex,
+        const reference_contig_segment& refSeq,
         std::vector<SVLocus>& loci) const;
 
     /// get local and remote breakends for each SV Candidate which can be extracted from a read pair
@@ -198,7 +191,7 @@ struct SVLocusScanner
         const bam_record* remoteReadPtr,
         const unsigned defaultReadGroupIndex,
         const std::map<std::string, int32_t>& chromToIndex,
-        const std::string& bkptRef,
+        const reference_contig_segment& refSeq,
         std::vector<SVObservation>& candidates) const;
 
     /// provide direct access to the frag distro for

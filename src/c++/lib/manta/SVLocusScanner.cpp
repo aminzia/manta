@@ -420,7 +420,8 @@ getSVBreakendCandidateClip(
 void
 getSVBreakendCandidateSemiAligned(
     const bam_record& bamRead,
-    const std::string& refSeq,
+    const ALIGNPATH::path_t& apath,
+    const reference_contig_segment& refSeq,
     unsigned& leadingMismatchLen,
     unsigned& trailingMismatchLen,
     const uint8_t minQ,
@@ -430,31 +431,7 @@ getSVBreakendCandidateSemiAligned(
     trailingMismatchLen = 0;
 
     using namespace ALIGNPATH;
-    const std::string qrySeq(bamRead.get_bam_read().get_string());
-
-    ALIGNPATH::path_t apath;
-    bam_cigar_to_apath(bamRead.raw_cigar(),bamRead.n_cigar(),apath);
-
-    // TODO: remove hard coded max size of 100bp
-    if (has_large_indel(apath)) return;
-
-
-    //std::cerr << "qrySeq = " << qrySeq << std::endl;
-    //std::cerr << "refSeq = " << refSeq << std::endl;
-
-    // soft-clipped reads, not looked at here
-    /*if (refSeq.size() != qrySeq.size())
-    {
-    	std::cerr << "Skip because of bad ref length." << std::endl;
-        return;
-    }*/
-
-    apath_add_seqmatch(qrySeq.begin(), qrySeq.end(),
-                       refSeq.begin(), refSeq.end(),
-                       apath);
-    //std::cout << " apath=" << apath << std::endl;
-
-
+    const bam_seq qrySeq(bamRead.get_bam_read());
 
     const uint8_t* qual(bamRead.qual());
     const unsigned readSize(bamRead.read_size());
@@ -590,15 +567,14 @@ getSVCandidatesFromSemiAligned(
     const ReadScannerOptions& opt,
     const bam_record& bamRead,
     const SimpleAlignment& bamAlign,
-    std::vector<SVObservation>& candidates,
-    const std::string& bkptRef)
+    const reference_contig_segment& refSeq,
+    std::vector<SVObservation>& candidates)
 {
     // read cannot be semi-aligned in unmapped
     if (bamRead.is_unmapped()) return;
 
     unsigned leadingMismatchLen(0), trailingMismatchLen(0);
-
-    getSVBreakendCandidateSemiAligned(bamRead,bkptRef,leadingMismatchLen, trailingMismatchLen);
+    getSVBreakendCandidateSemiAligned(bamRead, bamAlign.apath, refSeq, leadingMismatchLen, trailingMismatchLen);
 
     // soft-clipped reads don't define a full hypothesis, so they're always evidence for a 'complex' ie. undefined, event:
     using namespace SVEvidenceType;
@@ -903,8 +879,8 @@ getSingleReadSVCandidates(
     const ChromAlignment& localAlign,
     const bam_record* remoteReadPtr,
     const chromMap_t& chromToIndex,
-    std::vector<SVObservation>& candidates,
-    const std::string& bkptRef)
+    const reference_contig_segment& refSeq,
+    std::vector<SVObservation>& candidates)
 {
     using namespace illumina::common;
 
@@ -929,17 +905,14 @@ getSingleReadSVCandidates(
 #ifdef DEBUG_SCANNER
     log_os << logtag << " post-clip candidate_size: " << candidates.size() << "\n";
 #endif
-    if (bkptRef != "NA")
-    {
-        getSVCandidatesFromSemiAligned(opt, localRead, localAlign, candidates, bkptRef);
-    }
+
+    getSVCandidatesFromSemiAligned(opt, localRead, localAlign, refSeq, candidates);
 #ifdef DEBUG_SCANNER
     log_os << logtag << " post-semialigned candidate_size: " << candidates.size() << "\n";
 #endif
 
     /// - process split/SA reads:
     getSACandidatesFromRead(dopt, localRead, localAlign, chromToIndex, candidates);
-
 #ifdef DEBUG_SCANNER
     log_os << logtag << " post-split read candidate_size: " << candidates.size() << "\n";
 #endif
@@ -963,9 +936,9 @@ getReadBreakendsImpl(
     const bam_record& localRead,
     const bam_record* remoteReadPtr,
     const chromMap_t& chromToIndex,
+    const reference_contig_segment& refSeq,
     std::vector<SVObservation>& candidates,
-    known_pos_range2& localEvidenceRange,
-    const std::string& bkptRef)
+    known_pos_range2& localEvidenceRange)
 {
     using namespace illumina::common;
 
@@ -977,14 +950,14 @@ getReadBreakendsImpl(
     /// get some basic derived information from the bam_record:
     const ChromAlignment localAlign(localRead);
 
-    getSingleReadSVCandidates(opt, dopt, rstats, localRead, localAlign, remoteReadPtr, chromToIndex, candidates, bkptRef);
+    getSingleReadSVCandidates(opt, dopt, rstats, localRead, localAlign, remoteReadPtr, chromToIndex, refSeq, candidates);
 
     if (NULL != remoteReadPtr)
     {
         const bam_record& remoteRead(*remoteReadPtr);
         const ChromAlignment remoteAlign(remoteRead);
 
-        getSingleReadSVCandidates(opt, dopt, rstats, remoteRead, remoteAlign, remoteReadPtr, chromToIndex, candidates, bkptRef);
+        getSingleReadSVCandidates(opt, dopt, rstats, remoteRead, remoteAlign, remoteReadPtr, chromToIndex, refSeq, candidates);
     }
 
     // - process anomalous read pairs:
@@ -1219,8 +1192,7 @@ isReadFiltered(const bam_record& bamRead) const
     if (bamRead.is_filter()) return true;
     if (bamRead.is_dup()) return true;
     if (bamRead.is_secondary()) return true;
-    // Commenting this out for now, need to check later
-    //if (bamRead.map_qual() < _opt.minMapq) return true;
+    if (bamRead.map_qual() < _opt.minMapq) return true;
     return false;
 }
 
@@ -1236,8 +1208,6 @@ isProperPair(
 
     const Range& ppr(_stats[defaultReadGroupIndex].properPair);
     const int32_t fragmentSize(std::abs(bamRead.template_size()));
-
-    if (has_large_gap(bamRead)) return false;
 
     /// we're seeing way to much large fragment garbage in cancers to use the normal proper pair criteria, push the max fragment size out a bit for now:
     static const float maxAnomFactor(1.5);
@@ -1283,23 +1253,13 @@ bool
 SVLocusScanner::
 isLocalAssemblyEvidence(
     const bam_record& bamRead,
-    const std::string& bkptRef) const
+    const reference_contig_segment& refSeq) const
 {
     using namespace ALIGNPATH;
     //std::cerr << "Testing " << bamRead.qname() << " for local assembly evidence " << "\n";
 
-    {
-        unsigned leadingMismatchLen(0), trailingMismatchLen(0);
-        getSVBreakendCandidateSemiAligned(bamRead, bkptRef, leadingMismatchLen, trailingMismatchLen);
-        //std::cerr << "leadingMismatchLen= " << leadingMismatchLen << " trailingMismatchLen=" << trailingMismatchLen << " _opt.minSemiAlignedMismatchLen=" <<  _opt.minSemiAlignedMismatchLen << std::endl;
-        if ((leadingMismatchLen >= _opt.minSemiAlignedMismatchLen) || (trailingMismatchLen >= _opt.minSemiAlignedMismatchLen))
-        {
-            return true;
-        }
-
-    }
-
     const SimpleAlignment bamAlign(bamRead);
+
     //
     // large indel already in cigar string
     //
@@ -1329,9 +1289,18 @@ isLocalAssemblyEvidence(
     }
 
     //
-    // semi-aligned:
+    // semi-aligned read ends:
     //
-    if (isSemiAligned(bamRead, bkptRef, _opt.minSemiAlignedScoreGraph)) return true;
+    {
+        unsigned leadingMismatchLen(0), trailingMismatchLen(0);
+        getSVBreakendCandidateSemiAligned(bamRead, refSeq, leadingMismatchLen, trailingMismatchLen);
+        //std::cerr << "leadingMismatchLen= " << leadingMismatchLen << " trailingMismatchLen=" << trailingMismatchLen << " _opt.minSemiAlignedMismatchLen=" <<  _opt.minSemiAlignedMismatchLen << std::endl;
+        if ((leadingMismatchLen >= _opt.minSemiAlignedMismatchLen) || (trailingMismatchLen >= _opt.minSemiAlignedMismatchLen))
+        {
+            return true;
+        }
+
+    }
 
     return false;
 }
@@ -1344,8 +1313,8 @@ SVLocusScanner::
 getSVLoci(
     const bam_record& bamRead,
     const unsigned defaultReadGroupIndex,
-    const std::string& bkptRef,
     const std::map<std::string, int32_t>& chromToIndex,
+    const reference_contig_segment& refSeq,
     std::vector<SVLocus>& loci) const
 {
     loci.clear();
@@ -1353,7 +1322,7 @@ getSVLoci(
     const CachedReadGroupStats& rstats(_stats[defaultReadGroupIndex]);
     cachedQname = bamRead.qname();
     cachedMapq  = bamRead.map_qual();
-    getSVLociImpl(_opt, _dopt, rstats, bamRead, bkptRef, chromToIndex, loci);
+    getSVLociImpl(_opt, _dopt, rstats, bamRead, refSeq, chromToIndex, loci);
 }
 
 
@@ -1364,13 +1333,13 @@ getBreakendPair(
     const bam_record& localRead,
     const bam_record* remoteReadPtr,
     const unsigned defaultReadGroupIndex,
-    const  std::map<std::string, int32_t>& chromToIndex,
-    const std::string& bkptRef,
+    const std::map<std::string, int32_t>& chromToIndex,
+    const reference_contig_segment& refSeq,
     std::vector<SVObservation>& candidates) const
 {
     const CachedReadGroupStats& rstats(_stats[defaultReadGroupIndex]);
 
     // throw evidence range away in this case
     known_pos_range2 evidenceRange;
-    getReadBreakendsImpl(_opt, _dopt, rstats, localRead, remoteReadPtr, chromToIndex, candidates, evidenceRange, bkptRef);
+    getReadBreakendsImpl(_opt, _dopt, rstats, localRead, remoteReadPtr, chromToIndex, refSeq, candidates, evidenceRange);
 }
