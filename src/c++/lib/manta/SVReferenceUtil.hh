@@ -32,6 +32,18 @@ isRefRegionOverlap(
     const pos_t extraRefEdgeSize,
     const SVCandidate& sv);
 
+/// given a genome interval, attempt to add an extra buffer
+/// to the interval and return the reference sequence corresponding
+/// to this interval
+///
+/// \params[in] extraRefEdgeSize add this value to the ends of each
+///             interval prior to chomosome length clipping and reference
+///             retrieval
+/// \params[out] leadingTrim indicates how much was cut from the
+///              front of the requested interval (with edge buffer)
+/// \params[out] trailingTrim indicates how much was cut from the
+///              end of the requested interval (with edge buffer)
+///
 void
 getIntervalReferenceSegment(
     const std::string& referenceFilename,
@@ -62,7 +74,7 @@ getIntervalReferenceSegment(
 /// object
 ///
 /// for each region, we extract the hypothetical breakend region + extraRefEdgeSize bases
-/// on each side
+/// on each side, but limit the region to [0,chrom_size-1]
 ///
 void
 getSVReferenceSegments(
