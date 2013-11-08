@@ -395,9 +395,10 @@ isSemiAlignedBaseMatch(
 /// report the length from 0 to immediately before the indicated number of
 /// contiguous matches
 ///
+#if 0
 static
 void
-edgeMismatchLength(
+edgeMismatchLength_old(
     const SimpleAlignment& bamAlign,
     const bam_seq& querySeq,
     const reference_contig_segment& refSeq,
@@ -468,6 +469,146 @@ edgeMismatchLength(
 
     assert(leadingLength<=readSize);
     assert(trailingLength<=readSize);
+}
+#endif
+
+
+/// report the length from 0 to immediately before the indicated number of
+/// contiguous matches
+///
+static
+void
+leadingEdgeMismatchLength(
+    const SimpleAlignment& bamAlign,
+    const bam_seq& querySeq,
+    const reference_contig_segment& refSeq,
+    const unsigned contiguousMatchCount,
+    unsigned& leadingLength,
+    pos_t& leadingRefPos)
+{
+    using namespace ALIGNPATH;
+
+    assert(contiguousMatchCount != 0);
+
+    pos_t readIndex(0);
+    pos_t refIndex(bamAlign.pos);
+
+    leadingLength=0;
+    leadingRefPos=refIndex;
+
+    unsigned matchLength(0);
+    BOOST_FOREACH(const path_segment& ps, bamAlign.path)
+    {
+        if (is_segment_align_match(ps.type))
+        {
+            for (unsigned segPos(0); segPos<ps.length; ++segPos)
+            {
+                if (isSemiAlignedBaseMatch(querySeq.get_char(readIndex+segPos), refSeq.get_base(refIndex+segPos)))
+                {
+                    matchLength++;
+
+                    if (matchLength>=contiguousMatchCount)
+                    {
+                        leadingLength=(readIndex+segPos)-(matchLength-1);
+                        leadingRefPos=(refIndex+segPos)-(matchLength-1);
+                        return;
+                    }
+                }
+                else
+                {
+                    matchLength=0;
+                }
+            }
+        }
+        else
+        {
+            matchLength=0;
+        }
+
+        if (is_segment_type_read_length(ps.type)) readIndex += ps.length;
+        if (is_segment_type_ref_length(ps.type)) refIndex += ps.length;
+    }
+
+    leadingLength=readIndex;
+    leadingRefPos=refIndex;
+}
+
+
+static
+void
+trailingEdgeMismatchLength(
+    const SimpleAlignment& bamAlign,
+    const bam_seq& querySeq,
+    const reference_contig_segment& refSeq,
+    const unsigned contiguousMatchCount,
+    unsigned& trailingLength,
+    pos_t& trailingRefPos)
+{
+    using namespace ALIGNPATH;
+
+    assert(contiguousMatchCount != 0);
+
+    const pos_t readSize(querySeq.size());
+
+    pos_t readIndex(readSize-1);
+    pos_t refIndex(bamAlign.pos + apath_ref_length(bamAlign.path)-1);
+
+    unsigned matchLength(0);
+    BOOST_REVERSE_FOREACH(const path_segment& ps, bamAlign.path)
+    {
+        if (is_segment_align_match(ps.type))
+        {
+            for (unsigned segPos(0); segPos<ps.length; ++segPos)
+            {
+                if (isSemiAlignedBaseMatch(querySeq.get_char(readIndex-segPos), refSeq.get_base(refIndex-segPos)))
+                {
+                    matchLength++;
+
+                    if (matchLength>=contiguousMatchCount)
+                    {
+                        trailingLength=(readSize-(readIndex-segPos))-matchLength;
+                        trailingRefPos=(refIndex-segPos)+matchLength;
+                        return;
+                    }
+                }
+                else
+                {
+                    matchLength=0;
+                }
+            }
+        }
+        else
+        {
+            matchLength=0;
+        }
+
+        if (is_segment_type_read_length(ps.type)) readIndex -= ps.length;
+        if (is_segment_type_ref_length(ps.type)) refIndex -= ps.length;
+    }
+
+    trailingLength=readSize-(readIndex+1);
+    trailingRefPos=refIndex+1;
+}
+
+
+
+/// report the length from 0 to immediately before the indicated number of
+/// contiguous matches
+///
+static
+void
+edgeMismatchLength(
+    const SimpleAlignment& bamAlign,
+    const bam_seq& querySeq,
+    const reference_contig_segment& refSeq,
+    const unsigned contiguousMatchCount,
+    unsigned& leadingLength,
+    pos_t& leadingRefPos,
+    unsigned& trailingLength,
+    pos_t& trailingRefPos)
+{
+    leadingEdgeMismatchLength(bamAlign,querySeq,refSeq,contiguousMatchCount,leadingLength,leadingRefPos);
+    trailingEdgeMismatchLength(bamAlign,querySeq,refSeq,contiguousMatchCount,trailingLength,trailingRefPos);
 }
 
 

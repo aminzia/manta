@@ -111,7 +111,7 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromSemiAligned_null )
     BOOST_REQUIRE_EQUAL(leadingLength,0u);
     BOOST_REQUIRE_EQUAL(trailingLength,0u);
     BOOST_REQUIRE_EQUAL(leadingRefPos,alignPos);
-    BOOST_REQUIRE_EQUAL(trailingRefPos,alignPos+50-1);
+    BOOST_REQUIRE_EQUAL(trailingRefPos,alignPos+50);
 }
 
 
@@ -129,7 +129,7 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromSemiAligned_leading )
     BOOST_REQUIRE_EQUAL(leadingLength,10u);
     BOOST_REQUIRE_EQUAL(trailingLength,0u);
     BOOST_REQUIRE_EQUAL(leadingRefPos,alignPos+10);
-    BOOST_REQUIRE_EQUAL(trailingRefPos,alignPos+50-1);
+    BOOST_REQUIRE_EQUAL(trailingRefPos,alignPos+50);
 }
 
 
@@ -147,7 +147,7 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromSemiAligned_trailing )
     BOOST_REQUIRE_EQUAL(leadingLength,0u);
     BOOST_REQUIRE_EQUAL(trailingLength,10u);
     BOOST_REQUIRE_EQUAL(leadingRefPos,alignPos);
-    BOOST_REQUIRE_EQUAL(trailingRefPos,alignPos+50-1-10);
+    BOOST_REQUIRE_EQUAL(trailingRefPos,alignPos+50-10);
 }
 
 
@@ -165,7 +165,7 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromSemiAligned_both )
     BOOST_REQUIRE_EQUAL(leadingLength,10u);
     BOOST_REQUIRE_EQUAL(trailingLength,10u);
     BOOST_REQUIRE_EQUAL(leadingRefPos,alignPos+10);
-    BOOST_REQUIRE_EQUAL(trailingRefPos,alignPos+50-1-10);
+    BOOST_REQUIRE_EQUAL(trailingRefPos,alignPos+50-10);
 }
 
 
@@ -183,7 +183,7 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromSemiAligned_mismatch )
     BOOST_REQUIRE_EQUAL(leadingLength,50u);
     BOOST_REQUIRE_EQUAL(trailingLength,50u);
     BOOST_REQUIRE_EQUAL(leadingRefPos,alignPos+50);
-    BOOST_REQUIRE_EQUAL(trailingRefPos,alignPos+50-1-50);
+    BOOST_REQUIRE_EQUAL(trailingRefPos,alignPos+50-50);
 }
 
 
