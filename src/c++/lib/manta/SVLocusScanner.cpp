@@ -382,13 +382,17 @@ getSVBreakendCandidateClip(
 
 
 
+/// In the general case we want 'N''s to be counted as mismatches, but for
+/// the semi-aligned metric, we don't want N's to nominate read segments as
+/// SV-associated because of a string of Ns
+///
 static
 bool
-isBaseMatch(
+isSemiAlignedBaseMatch(
     const char a,
     const char b)
 {
-    if ((a=='N') || (b=='N')) return false;
+    if ((a=='N') || (b=='N')) return true;
     return (a==b);
 }
 
@@ -421,7 +425,7 @@ edgeMismatchLength(
     leadingLength=0;
     leadingRefPos=refIndex;
     trailingLength=readSize;
-    trailingRefPos=refIndex;
+    trailingRefPos=refIndex-1;
     bool isLeadingSet(false);
 
     unsigned matchLength(0);
@@ -431,7 +435,7 @@ edgeMismatchLength(
         {
             for (unsigned segPos(0); segPos<ps.length;++segPos)
             {
-                if(isBaseMatch(querySeq.get_char(readIndex+segPos), refSeq.get_base(refIndex+segPos)))
+                if(isSemiAlignedBaseMatch(querySeq.get_char(readIndex+segPos), refSeq.get_base(refIndex+segPos)))
                 {
                     matchLength++;
 
@@ -441,8 +445,8 @@ edgeMismatchLength(
                         trailingRefPos=refIndex+segPos;
                         if(! isLeadingSet)
                         {
-                            leadingLength=(readIndex+segPos)-(matchLength+1);
-                            leadingRefPos=(refIndex+segPos)-(matchLength+1);
+                            leadingLength=(readIndex+segPos)-(matchLength-1);
+                            leadingRefPos=(refIndex+segPos)-(matchLength-1);
                             isLeadingSet=true;
                         }
                     }
@@ -467,6 +471,9 @@ edgeMismatchLength(
         leadingLength=readIndex;
         leadingRefPos=refIndex;
     }
+
+    assert(leadingLength<=readSize);
+    assert(trailingLength<=readSize);
 }
 
 
@@ -505,6 +512,9 @@ getSVBreakendCandidateSemiAligned(
     edgeMismatchLength(bamAlign, querySeq, refSeq, contiguousMatchCount,
         leadingMismatchLenTmp, leadingRefPos,
         trailingMismatchLenTmp, trailingRefPos);
+
+    if((leadingMismatchLenTmp + trailingMismatchLenTmp) >= readSize) return;
+
     if (0 != leadingMismatchLenTmp)
     {
         // check the quality of mismatch region, not including clipped region:
