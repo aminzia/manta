@@ -544,14 +544,6 @@ getJumpAssembly(
         }
     }
 
-    const pos_t beginPos1(std::max(0, (sv.bp1.interval.range.begin_pos()-extraRefEdgeSize)));
-    const pos_t beginPos2(std::max(0, (sv.bp2.interval.range.begin_pos()-extraRefEdgeSize)));
-
-    // assemble contig spanning the breakend:
-    _spanningAssembler.assembleSVBreakends(
-            sv.bp1, sv.bp2, bporient.isBp1Reversed, bporient.isBp2Reversed,
-            assemblyData.contigs, assemblyData.bp1ref.seq(), beginPos1, assemblyData.bp2ref.seq(), beginPos2);
-
     unsigned bp1LeadingTrim;
     unsigned bp1TrailingTrim;
     unsigned bp2LeadingTrim;
@@ -566,6 +558,13 @@ getJumpAssembly(
     pos_t align2LeadingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(bp2LeadingTrim)));
     pos_t align2TrailingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(bp2TrailingTrim)));
 
+    // assemble contig spanning the breakend:
+    _spanningAssembler.assembleSVBreakends(
+            sv.bp1, sv.bp2,
+            bporient.isBp1Reversed, bporient.isBp2Reversed,
+            assemblyData.bp1ref, assemblyData.bp2ref,
+            assemblyData.contigs);
+
     std::string bp1refSeq = assemblyData.bp1ref.seq();
     std::string bp2refSeq = assemblyData.bp2ref.seq();
     if (bporient.isBp1Reversed)
@@ -578,7 +577,6 @@ getJumpAssembly(
         reverseCompStr(bp2refSeq);
         std::swap(align2LeadingCut, align2TrailingCut);
     }
-//>>>>>>> master
     const std::string* align1RefStrPtr(&bp1refSeq);
     const std::string* align2RefStrPtr(&bp2refSeq);
 
@@ -761,14 +759,10 @@ getSmallSVAssembly(
     const pos_t leadingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(leadingTrim)));
     const pos_t trailingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(trailingTrim)));
 
-    const std::string& align1RefStr(assemblyData.bp1ref.seq());
+       const std::string& align1RefStr(assemblyData.bp1ref.seq());
 
     // assemble contigs in the breakend region
-
-    //const bam_header_info::chrom_info& chromInfo(_header.chrom_data[sv.bp1.interval.tid]);
-    const pos_t beginPos(std::max(0, (sv.bp1.interval.range.begin_pos()-extraRefEdgeSize)));
-
-    _smallSVAssembler.assembleSingleSVBreakend(sv.bp1, assemblyData.contigs, assemblyData.bp1ref.seq(), beginPos);
+    _smallSVAssembler.assembleSingleSVBreakend(sv.bp1, assemblyData.bp1ref, assemblyData.contigs);
 
 #ifdef DEBUG_REFINER
     log_os << logtag << "align1RefSize/Seq: " << align1RefStr.size() << '\n';

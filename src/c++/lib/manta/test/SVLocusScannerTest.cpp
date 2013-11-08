@@ -60,6 +60,11 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromSemiAligned )
 
     static const char testSeq[] = "AACCCACAAACATCACACACATACCCGTAATATTTTCATTGACTGCATTAGATTCTTCTACAGTGCGTCTAAGAGTCCAGAGACCGACTTTTTTCTAAAA";
     static const char testRef[] = "AACCCACAAACATCACACACATACCCGTAATATTTTCATTGACTGCATTAGATTCTTCTACAGTGCGTCTAAGAGTCCAGAGACCGACTTTTGGGGGGGG";
+    static const pos_t alignPos(500);
+
+    reference_contig_segment testRefSeg;
+    testRefSeg.seq() = testRef;
+    testRefSeg.set_offset(alignPos);
 
     // initialize test qual array to all Q30's:
     static const unsigned seqSize((sizeof(testSeq)-1)/sizeof(char));
@@ -72,11 +77,11 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromSemiAligned )
     edit_bam_read_and_quality(testSeq,qual,*bamDataPtr);
 
     SimpleAlignment align(bamRead);
-    align.pos = 500;
+    align.pos = alignPos;
 
     std::vector<SVObservation> candidates;
 
-    getSVCandidatesFromSemiAligned(opt,bamRead,align,candidates,testRef);
+    getSVCandidatesFromSemiAligned(opt, bamRead, align, testRefSeg, candidates);
 
     BOOST_REQUIRE_EQUAL(candidates.size(),1u);
     BOOST_REQUIRE(candidates[0].bp1.interval.range.is_pos_intersect(600));
