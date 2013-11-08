@@ -91,8 +91,11 @@ runESL(const ESLOptions& opt)
     log_os << log_tag << " scanRegion= " << scanRegion << "\n";
 #endif
 
+    // grab the reference for segment we're estimating plus a buffer around the segment edges:
+    static const unsigned refEdgeBufferSize(500);
+
     reference_contig_segment refSegment;
-    getIntervalReferenceSegment(opt.referenceFilename,bamHeader,scanRegion,refSegment);
+    getIntervalReferenceSegment(opt.referenceFilename, bamHeader, refEdgeBufferSize, scanRegion, refSegment);
 
     SVLocusSetFinder locusFinder(opt,scanRegion);
     locusFinder.setBamHeader(header);

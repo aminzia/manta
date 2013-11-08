@@ -181,20 +181,25 @@ addSVNodeData(
            << "\n";
 #endif
 
+    //
+    // get reference for this search interval:
+    //
+    const bam_header_info& bamHeader(getSet().header);
+
+    // grab the reference for segment we're estimating plus a buffer around the segment edges:
+    static const unsigned refEdgeBufferSize(100);
+    reference_contig_segment refSegment;
+    getIntervalReferenceSegment(referenceFilename, bamHeader, refEdgeBufferSize, searchInterval, refSegment);
+
     // iterate through reads, test reads for association and add to svData:
     unsigned bamIndex(0);
     BOOST_FOREACH(streamPtr& bamPtr, _bamStreams)
     {
         SVCandidateSetReadPairSampleGroup& svDataGroup(svData.getDataGroup(bamIndex));
         bam_streamer& read_stream(*bamPtr);
-        const bam_header_t& header(*(bamPtr->get_header()));
-        const bam_header_info bamHeader(header);
 
         // set bam stream to new search interval:
         read_stream.set_new_region(searchInterval.tid,searchInterval.range.begin_pos(),searchInterval.range.end_pos());
-
-        reference_contig_segment refSegment;
-        getIntervalReferenceSegment(referenceFilename,bamHeader,searchInterval,refSegment);
 
 #ifdef DEBUG_SVDATA
         log_os << logtag << "scanning bamIndex: " << bamIndex << "\n";
