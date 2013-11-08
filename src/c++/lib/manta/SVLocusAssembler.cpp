@@ -65,7 +65,8 @@ getBreakendReads(
     known_pos_range2 searchRange;
     {
         // ideally this should be dependent on the insert size dist
-        static const size_t minIntervalSize(200);
+        // TODO: follow-up on trial value of 200 in a separate branch/build
+        static const size_t minIntervalSize(400);
         if (bp.interval.range.size() >= minIntervalSize)
         {
             searchRange = bp.interval.range;
@@ -140,8 +141,6 @@ getBreakendReads(
             if (bamRead.is_filter()) continue;
             if (bamRead.is_dup()) continue;
             if (bamRead.is_secondary()) continue;
-
-            /// TODO: Add SA read support -- temporarily reject all supplemental reads:
             if (bamRead.is_supplement()) return;
 
             if ((bamRead.pos()-1) >= searchRange.end_pos()) break;
@@ -188,33 +187,31 @@ getBreakendReads(
 
             bool isSemiAlignedKeeper(false);
             {
-                {
-                    static const unsigned minMismatchLen(4);
+                static const unsigned minMismatchLen(4);
 
-                    unsigned leadingMismatchLen(0);
-                    unsigned trailingMismatchLen(0);
-                    getSVBreakendCandidateSemiAligned(bamRead, bamAlign, refSeq, leadingMismatchLen, trailingMismatchLen);
+                unsigned leadingMismatchLen(0);
+                unsigned trailingMismatchLen(0);
+                getSVBreakendCandidateSemiAligned(bamRead, bamAlign, refSeq, leadingMismatchLen, trailingMismatchLen);
 
-                    if (isSearchForRightOpen)
-                    {
-                        if (trailingMismatchLen >= minMismatchLen) isSemiAlignedKeeper = true;
-                    }
+               if (isSearchForRightOpen)
+               {
+                   if (trailingMismatchLen >= minMismatchLen) isSemiAlignedKeeper = true;
+               }
 
-                    if (isSearchForLeftOpen)
-                    {
-                        if (leadingMismatchLen >= minMismatchLen) isSemiAlignedKeeper = true;
-                    }
+               if (isSearchForLeftOpen)
+               {
+                   if (leadingMismatchLen >= minMismatchLen) isSemiAlignedKeeper = true;
+               }
 
 #if 0
-                    if (isSemiAligned(bamRead,ref,_scanOpt.minSemiAlignedScoreCandidates))
-                    {
-                        isSemiAlignedKeeper = true;
+               if (isSemiAligned(bamRead,ref,_scanOpt.minSemiAlignedScoreCandidates))
+               {
+                   isSemiAlignedKeeper = true;
 #ifdef DEBUG_ASBL
-                        ++semiAlignedCnt;
+                   ++semiAlignedCnt;
 #endif
-                    }
+               }
 #endif
-                }
             }
 
             bool isShadowKeeper(false);
@@ -268,7 +265,6 @@ getBreakendReads(
 #ifdef DEBUG_ASBL
         log_os << "bam " << bamIndex << " semi-aligned " << semiAlignedCnt << " shadow " << shadowCnt << "\n";
 #endif
-        //std::cerr << "bam " << bamIndex << " semi-aligned " << semiAlignedCnt << " shadow " << shadowCnt << "\n";
     }
 }
 

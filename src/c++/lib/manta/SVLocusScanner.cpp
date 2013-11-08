@@ -19,7 +19,6 @@
 
 #include "alignment/ReadScorer.hh"
 
-#include "blt_util/align_path.hh"
 #include "blt_util/align_path_bam_util.hh"
 #include "blt_util/align_path_util.hh"
 #include "blt_util/bam_record_util.hh"
@@ -30,8 +29,6 @@
 #include "manta/SVLocusScanner.hh"
 
 #include "boost/foreach.hpp"
-
-#include <cmath>
 
 
 //#define DEBUG_SCANNER
@@ -46,9 +43,6 @@
 
 
 const float SVObservationWeights::closePairFactor(4);
-
-std::string cachedQname;
-uint8_t cachedMapq;
 
 
 
@@ -119,7 +113,7 @@ static
 void
 updateSABreakend(
     const ReadScannerDerivOptions& dopt,
-    const ChromAlignment& align,
+    const SimpleAlignment& align,
     SVBreakend& breakend)
 {
     // Need to use the match descriptors to determine if
@@ -155,8 +149,8 @@ static
 SVObservation
 GetSplitSACandidate(
     const ReadScannerDerivOptions& dopt,
-    const ChromAlignment& localAlign,
-    const ChromAlignment& remoteAlign)
+    const SimpleAlignment& localAlign,
+    const SimpleAlignment& remoteAlign)
 {
     using namespace SVEvidenceType;
     static const index_t svSource(SPLIT_ALIGN);
@@ -184,7 +178,7 @@ void
 getSACandidatesFromRead(
     const ReadScannerDerivOptions& dopt,
     const bam_record& localRead,
-    const ChromAlignment& localAlign,
+    const SimpleAlignment& localAlign,
     const chromMap_t& chromToIndex,
     std::vector<SVObservation>& candidates)
 {
@@ -199,7 +193,7 @@ getSACandidatesFromRead(
         split_string(saStr, ';', saVec);
     }
 
-    ChromAlignment remoteAlign;
+    SimpleAlignment remoteAlign;
 
     // For now we will only handle a single split alignment
     //  In the future we will need to sort the SA tags by order on of segments on
@@ -255,7 +249,7 @@ void
 getSVCandidatesFromReadIndels(
     const ReadScannerOptions& opt,
     const ReadScannerDerivOptions& dopt,
-    const ChromAlignment& align,
+    const SimpleAlignment& align,
     std::vector<SVObservation>& candidates)
 {
     using namespace SVEvidenceType;
@@ -895,16 +889,12 @@ getSVCandidatesFromShadow(
     const bam_record& localRead,
     const SimpleAlignment& localAlign,
     const bam_record* remoteReadPtr,
+
     std::vector<SVObservation>& candidates)
 {
     using namespace SVEvidenceType;
     static const index_t svSource(SHADOW);
 
-    /*if (NULL == remoteReadPtr)
-    {
-        // we want info on both reads
-        return;
-    }*/
     static const bool isComplex(true);
     pos_t singletonGenomePos(0);
     int targetId(0);
@@ -914,7 +904,7 @@ getSVCandidatesFromShadow(
         // need to take care of this case
         // need to rely on cached mapq and qname
         return;
-        if (!isGoodShadow(localRead,cachedMapq,cachedQname,opt.minSingletonMapqGraph))
+        if (!isGoodShadow(localRead,lastMapq,lastQname,opt.minSingletonMapqGraph))
         {
             return;
         }
@@ -967,7 +957,7 @@ getSingleReadSVCandidates(
     const ReadScannerOptions& opt,
     const ReadScannerDerivOptions& dopt,
     const bam_record& localRead,
-    const ChromAlignment& localAlign,
+    const SimpleAlignment& localAlign,
     const chromMap_t& chromToIndex,
     const reference_contig_segment& refSeq,
     std::vector<SVObservation>& candidates)
@@ -1006,9 +996,6 @@ getSingleReadSVCandidates(
 #ifdef DEBUG_SCANNER
     log_os << logtag << " post-split read candidate_size: " << candidates.size() << "\n";
 #endif
-
-    // TODO: process shadow reads
-    //getSVCandidatesFromShadow(opt, rstats, localRead, localAlign,remoteReadPtr,candidates);
 }
 
 
@@ -1039,7 +1026,7 @@ getReadBreakendsImpl(
     //if (localRead.is_mate_unmapped()) return;
 
     /// get some basic derived information from the bam_record:
-    const ChromAlignment localAlign(localRead);
+    const SimpleAlignment localAlign(localRead);
 
     getSingleReadSVCandidates(opt, dopt, localRead, localAlign, chromToIndex, localRefSeq, candidates);
 
@@ -1047,10 +1034,13 @@ getReadBreakendsImpl(
     {
         assert(NULL != remoteRefSeqPtr);
         const bam_record& remoteRead(*remoteReadPtr);
-        const ChromAlignment remoteAlign(remoteRead);
+        const SimpleAlignment remoteAlign(remoteRead);
 
         getSingleReadSVCandidates(opt, dopt, remoteRead, remoteAlign, chromToIndex, (*remoteRefSeqPtr), candidates);
     }
+
+    // process shadows:
+    //getSVCandidatesFromShadow(opt, rstats, localRead, localAlign,remoteReadPtr,candidates);
 
     // - process anomalous read pairs:
     getSVCandidatesFromPair(opt, rstats, localRead, localAlign, remoteReadPtr, candidates);
@@ -1348,7 +1338,6 @@ isLocalAssemblyEvidence(
     const reference_contig_segment& refSeq) const
 {
     using namespace ALIGNPATH;
-    //std::cerr << "Testing " << bamRead.qname() << " for local assembly evidence " << "\n";
 
     const SimpleAlignment bamAlign(bamRead);
 
@@ -1359,11 +1348,7 @@ isLocalAssemblyEvidence(
     {
         if (ps.type == INSERT || ps.type == DELETE)
         {
-            //std::cerr << "ps.length=" << ps.length << " _opt.minCandidateVariantSize=" << _opt.minCandidateVariantSize << std::endl;
-            if (ps.length>=_opt.minCandidateVariantSize)
-            {
-                return true;
-            }
+            if (ps.length>=_opt.minCandidateVariantSize) return true;
         }
     }
 
@@ -1373,7 +1358,6 @@ isLocalAssemblyEvidence(
     {
         unsigned leadingClipLen(0), trailingClipLen(0);
         getSVBreakendCandidateClip(bamRead, bamAlign.path, leadingClipLen, trailingClipLen);
-        //std::cerr << "leadingClipLenTmp= " << leadingClipLenTmp << " trailingClipLen=" << trailingClipLen << " _opt.minSoftClipLen=" << _opt.minSoftClipLen  << "\n";
         if ((leadingClipLen >= _opt.minSoftClipLen) || (trailingClipLen >= _opt.minSoftClipLen))
         {
             return true;
@@ -1412,9 +1396,9 @@ getSVLoci(
     loci.clear();
 
     const CachedReadGroupStats& rstats(_stats[defaultReadGroupIndex]);
-    cachedQname = bamRead.qname();
-    cachedMapq  = bamRead.map_qual();
     getSVLociImpl(_opt, _dopt, rstats, bamRead, chromToIndex, refSeq, loci);
+    //lastQname = bamRead.qname();
+    //lastMapq  = bamRead.map_qual();
 }
 
 

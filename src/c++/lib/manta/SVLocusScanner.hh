@@ -272,5 +272,7 @@ private:
 
     std::vector<CachedReadGroupStats> _stats;
 
+//    std::string lastQname;
+//    uint8_t lastMapq;
 };
 

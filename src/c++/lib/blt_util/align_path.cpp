@@ -626,18 +626,6 @@ is_clipped(const path_t& apath)
     return false;
 }
 
-bool
-has_large_indel(const path_t& apath)
-{
-    static const unsigned maxIndelSize(100);
-    BOOST_FOREACH(const path_segment& ps, apath)
-    {
-        if (INSERT == ps.type && ps.length > maxIndelSize) return true;
-        if (DELETE == ps.type && ps.length > maxIndelSize) return true;
-    }
-    return false;
-}
-
 unsigned
 get_clip_len(const path_t& apath)
 {

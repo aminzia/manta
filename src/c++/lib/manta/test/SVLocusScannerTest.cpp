@@ -37,7 +37,7 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromReadIndels )
     bam1_t* bamDataPtr(bamRead.get_data());
     edit_bam_cigar(inputPath,*bamDataPtr);
 
-    ChromAlignment align(bamRead);
+    SimpleAlignment align(bamRead);
 
     std::vector<SVObservation> candidates;
 

@@ -388,10 +388,6 @@ is_clipped(const path_t& apath);
 unsigned
 get_clip_len(const path_t& apath);
 
-/// check if alignment contains large indel ("large" currently hard-coded as 100bp)
-bool
-has_large_indel(const path_t& apath);
-
 /// does either edge of the alignment
 /// contain a segment which impacts read length or reference positions?
 /// (INSERT,DELETE,SKIP,SOFT_CLIP)

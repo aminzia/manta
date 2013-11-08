@@ -21,6 +21,7 @@
 #include "common/Exceptions.hh"
 #include "manta/ReadGroupStatsSet.hh"
 #include "manta/SVCandidateUtil.hh"
+#include "manta/SVReferenceUtil.hh"
 
 #include "boost/foreach.hpp"
 
@@ -564,14 +565,6 @@ getCandidatesFromData(
     {
         SVCandidateSetReadPairSampleGroup& svDataGroup(svData.getDataGroup(bamIndex));
 
-        // OST: how do I get the reference here??
-        /*bam_streamer& read_stream(*bamPtr);
-        const bam_header_t& header(*(bamPtr->get_header()));
-        const bam_header_info bamHeader(header);
-
-        reference_contig_segment refSegment;
-        getReference(referenceFilename,bamHeader,refSegment);*/
-
         BOOST_FOREACH(SVCandidateSetReadPair& pair, svDataGroup)
         {
             SVCandidateSetRead* localReadPtr(&(pair.read1));
@@ -650,10 +643,8 @@ SVFinder::
 findCandidateSV(
     const std::map<std::string, int32_t>& chromToIndex,
     const EdgeInfo& edge,
-    const std::string& referenceFilename,
     SVCandidateSetData& svData,
-    std::vector<SVCandidate>& svs
-)
+    std::vector<SVCandidate>& svs)
 {
     svData.clear();
     svs.clear();
@@ -693,14 +684,14 @@ findCandidateSV(
     reference_contig_segment refSeq2;
     {
         GenomeInterval searchInterval;
-        getNodeRefSeq(bamHeader, locus, edge.nodeIndex1, referenceFilename, searchInterval, refSeq1);
+        getNodeRefSeq(bamHeader, locus, edge.nodeIndex1, _referenceFilename, searchInterval, refSeq1);
         addSVNodeData(chromToIndex, locus, edge.nodeIndex1, edge.nodeIndex2, searchInterval, refSeq1, true, svData);
     }
 
     if (edge.nodeIndex1 != edge.nodeIndex2)
     {
         GenomeInterval searchInterval;
-        getNodeRefSeq(bamHeader, locus, edge.nodeIndex2, referenceFilename, searchInterval, refSeq2);
+        getNodeRefSeq(bamHeader, locus, edge.nodeIndex2, _referenceFilename, searchInterval, refSeq2);
         addSVNodeData(chromToIndex, locus, edge.nodeIndex2, edge.nodeIndex1, searchInterval, refSeq2, false, svData);
     }
     else
