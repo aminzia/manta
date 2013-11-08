@@ -119,7 +119,7 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromSemiAligned_leading )
 {
     static const pos_t alignPos(500);
     static const char querySeq[] = "AACCCACAAACATCACACACAAGAGTCCAGAGACCGACTTTTTTCTAAAA";
-    static const char refSeq[]   = "TTTTTTTTTTCATCACACACAAGAGTCCAGAGACCGACTTTTTTCTAAAA";
+    static const char refSeq[]   = "AACCTTTTTTCATCACACACAAGAGTCCAGAGACCGACTTTTTTCTAAAA";
 
     unsigned leadingLength(0), trailingLength(0);
     pos_t leadingRefPos(0), trailingRefPos(0);
@@ -137,7 +137,7 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromSemiAligned_trailing )
 {
     static const pos_t alignPos(500);
     static const char querySeq[] = "AACCCACAAACATCACACACAAGAGTCCAGAGACCGACTTTTTTCTAAAA";
-    static const char refSeq[]   = "AACCCACAAACATCACACACAAGAGTCCAGAGACCGACTTCCCCCCCCCC";
+    static const char refSeq[]   = "AACCCACAAACATCACACACAAGAGTCCAGAGACCGACTTCCCCCCAAAA";
 
     unsigned leadingLength(0), trailingLength(0);
     pos_t leadingRefPos(0), trailingRefPos(0);
@@ -155,7 +155,7 @@ BOOST_AUTO_TEST_CASE( test_getSVCandidatesFromSemiAligned_both )
 {
     static const pos_t alignPos(500);
     static const char querySeq[] = "AACCCACAAACATCACACACAAGAGTCCAGAGACCGACTTTTTTCTAAAA";
-    static const char refSeq[]   = "TTTTTTTTTTCATCACACACAAGAGTCCAGAGACCGACTTCCCCCCCCCC";
+    static const char refSeq[]   = "AACCTTTTTTCATCACACACAAGAGTCCAGAGACCGACTTCCCCCCAAAA";
 
     unsigned leadingLength(0), trailingLength(0);
     pos_t leadingRefPos(0), trailingRefPos(0);
