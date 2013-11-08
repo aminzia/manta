@@ -307,7 +307,6 @@ runGSC(
         {
             log_os << logtag << " starting analysis of edge: ";
             dumpEdgeInfo(edge,cset,log_os);
-            // good old stackoverflow :-)
             startTime = clock();
         }
 

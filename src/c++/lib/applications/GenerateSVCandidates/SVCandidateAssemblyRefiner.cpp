@@ -560,10 +560,10 @@ getJumpAssembly(
 
     // assemble contig spanning the breakend:
     _spanningAssembler.assembleSVBreakends(
-            sv.bp1, sv.bp2,
-            bporient.isBp1Reversed, bporient.isBp2Reversed,
-            assemblyData.bp1ref, assemblyData.bp2ref,
-            assemblyData.contigs);
+        sv.bp1, sv.bp2,
+        bporient.isBp1Reversed, bporient.isBp2Reversed,
+        assemblyData.bp1ref, assemblyData.bp2ref,
+        assemblyData.contigs);
 
     std::string bp1refSeq = assemblyData.bp1ref.seq();
     std::string bp2refSeq = assemblyData.bp2ref.seq();
@@ -759,7 +759,7 @@ getSmallSVAssembly(
     const pos_t leadingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(leadingTrim)));
     const pos_t trailingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(trailingTrim)));
 
-       const std::string& align1RefStr(assemblyData.bp1ref.seq());
+    const std::string& align1RefStr(assemblyData.bp1ref.seq());
 
     // assemble contigs in the breakend region
     _smallSVAssembler.assembleSingleSVBreakend(sv.bp1, assemblyData.bp1ref, assemblyData.contigs);

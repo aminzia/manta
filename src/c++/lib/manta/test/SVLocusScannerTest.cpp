@@ -93,7 +93,7 @@ semiAlignTestCase(
     align.pos = alignPos;
 
     edgeMismatchLength(align, bamRead.get_bam_read(), testRefSeg, 5,
-        leadingLength, leadingRefPos, trailingLength, trailingRefPos);
+                       leadingLength, leadingRefPos, trailingLength, trailingRefPos);
 }
 
 

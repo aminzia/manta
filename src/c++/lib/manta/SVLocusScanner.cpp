@@ -431,19 +431,19 @@ edgeMismatchLength(
     unsigned matchLength(0);
     BOOST_FOREACH(const path_segment& ps, bamAlign.path)
     {
-        if(is_segment_align_match(ps.type))
+        if (is_segment_align_match(ps.type))
         {
-            for (unsigned segPos(0); segPos<ps.length;++segPos)
+            for (unsigned segPos(0); segPos<ps.length; ++segPos)
             {
-                if(isSemiAlignedBaseMatch(querySeq.get_char(readIndex+segPos), refSeq.get_base(refIndex+segPos)))
+                if (isSemiAlignedBaseMatch(querySeq.get_char(readIndex+segPos), refSeq.get_base(refIndex+segPos)))
                 {
                     matchLength++;
 
-                    if(matchLength>=contiguousMatchCount)
+                    if (matchLength>=contiguousMatchCount)
                     {
                         trailingLength=readSize-(readIndex+segPos+1);
                         trailingRefPos=refIndex+segPos;
-                        if(! isLeadingSet)
+                        if (! isLeadingSet)
                         {
                             leadingLength=(readIndex+segPos)-(matchLength-1);
                             leadingRefPos=(refIndex+segPos)-(matchLength-1);
@@ -510,10 +510,10 @@ getSVBreakendCandidateSemiAligned(
     unsigned leadingMismatchLenTmp(0);
     unsigned trailingMismatchLenTmp(0);
     edgeMismatchLength(bamAlign, querySeq, refSeq, contiguousMatchCount,
-        leadingMismatchLenTmp, leadingRefPos,
-        trailingMismatchLenTmp, trailingRefPos);
+                       leadingMismatchLenTmp, leadingRefPos,
+                       trailingMismatchLenTmp, trailingRefPos);
 
-    if((leadingMismatchLenTmp + trailingMismatchLenTmp) >= readSize) return;
+    if ((leadingMismatchLenTmp + trailingMismatchLenTmp) >= readSize) return;
 
     if (0 != leadingMismatchLenTmp)
     {
@@ -663,8 +663,8 @@ getSVCandidatesFromSemiAligned(
     unsigned trailingMismatchLen(0), trailingClipLen(0);
     pos_t leadingRefPos(0), trailingRefPos(0);
     getSVBreakendCandidateSemiAligned(bamRead, bamAlign, refSeq,
-        leadingMismatchLen, leadingClipLen, leadingRefPos,
-        trailingMismatchLen, trailingClipLen, trailingRefPos);
+                                      leadingMismatchLen, leadingClipLen, leadingRefPos,
+                                      trailingMismatchLen, trailingClipLen, trailingRefPos);
 
     if ((leadingMismatchLen+leadingClipLen + trailingMismatchLen+trailingClipLen) >= bamRead.read_size()) return;
 
