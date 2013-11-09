@@ -158,6 +158,7 @@ getNodeRefSeq(
 {
     // get full search interval:
     const SVLocusNode& localNode(locus.getNode(localNodeIndex));
+    searchInterval = (localNode.getInterval());
     searchInterval.range.merge_range(localNode.getEvidenceRange());
 
     // grab the reference for segment we're estimating plus a buffer around the segment edges:
