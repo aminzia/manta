@@ -395,87 +395,6 @@ isSemiAlignedBaseMatch(
 /// report the length from 0 to immediately before the indicated number of
 /// contiguous matches
 ///
-#if 0
-static
-void
-edgeMismatchLength_old(
-    const SimpleAlignment& bamAlign,
-    const bam_seq& querySeq,
-    const reference_contig_segment& refSeq,
-    const unsigned contiguousMatchCount,
-    unsigned& leadingLength,
-    pos_t& leadingRefPos,
-    unsigned& trailingLength,
-    pos_t& trailingRefPos)
-{
-    using namespace ALIGNPATH;
-
-    assert(contiguousMatchCount != 0);
-
-    const unsigned readSize(querySeq.size());
-
-    pos_t readIndex(0);
-    pos_t refIndex(bamAlign.pos);
-
-    leadingLength=0;
-    leadingRefPos=refIndex;
-    trailingLength=readSize;
-    trailingRefPos=refIndex-1;
-    bool isLeadingSet(false);
-
-    unsigned matchLength(0);
-    BOOST_FOREACH(const path_segment& ps, bamAlign.path)
-    {
-        if (is_segment_align_match(ps.type))
-        {
-            for (unsigned segPos(0); segPos<ps.length; ++segPos)
-            {
-                if (isSemiAlignedBaseMatch(querySeq.get_char(readIndex+segPos), refSeq.get_base(refIndex+segPos)))
-                {
-                    matchLength++;
-
-                    if (matchLength>=contiguousMatchCount)
-                    {
-                        trailingLength=readSize-(readIndex+segPos+1);
-                        trailingRefPos=refIndex+segPos;
-                        if (! isLeadingSet)
-                        {
-                            leadingLength=(readIndex+segPos)-(matchLength-1);
-                            leadingRefPos=(refIndex+segPos)-(matchLength-1);
-                            isLeadingSet=true;
-                        }
-                    }
-                }
-                else
-                {
-                    matchLength=0;
-                }
-            }
-        }
-        else
-        {
-            matchLength=0;
-        }
-
-        if (is_segment_type_read_length(ps.type)) readIndex += ps.length;
-        if (is_segment_type_ref_length(ps.type)) refIndex += ps.length;
-    }
-
-    if (! isLeadingSet)
-    {
-        leadingLength=readIndex;
-        leadingRefPos=refIndex;
-    }
-
-    assert(leadingLength<=readSize);
-    assert(trailingLength<=readSize);
-}
-#endif
-
-
-/// report the length from 0 to immediately before the indicated number of
-/// contiguous matches
-///
 static
 void
 leadingEdgeMismatchLength(
@@ -532,6 +451,7 @@ leadingEdgeMismatchLength(
     leadingLength=readIndex;
     leadingRefPos=refIndex;
 }
+
 
 
 static
@@ -609,6 +529,10 @@ edgeMismatchLength(
 {
     leadingEdgeMismatchLength(bamAlign,querySeq,refSeq,contiguousMatchCount,leadingLength,leadingRefPos);
     trailingEdgeMismatchLength(bamAlign,querySeq,refSeq,contiguousMatchCount,trailingLength,trailingRefPos);
+
+    const unsigned readSize(querySeq.size());
+    assert(leadingLength<=readSize);
+    assert(trailingLength<=readSize);
 }
 
 
@@ -992,7 +916,7 @@ getSVCandidatesFromPair(
 
 #ifdef DEBUG_SCANNER
     static const std::string logtag("getSVCandidatesFromPair");
-    log_os << logtag << " evaluating sv: " << sv << "\n";
+    log_os << logtag << " evaluating pair sv for inclusion: " << sv << "\n";
 #endif
 
 
@@ -1105,11 +1029,6 @@ getSingleReadSVCandidates(
 {
     using namespace illumina::common;
 
-#ifdef DEBUG_SCANNER
-    static const std::string logtag("getSingleReadSVCandidates");
-    log_os << logtag << " post-indels candidate_size: " << candidates.size() << "\n";
-#endif
-
     /// TODO: can't handle these yet, but plan to soon:
     //if (localRead.is_mate_unmapped()) return;
 
@@ -1117,6 +1036,7 @@ getSingleReadSVCandidates(
     getSVCandidatesFromReadIndels(opt, dopt, localAlign, candidates);
 
 #ifdef DEBUG_SCANNER
+    static const std::string logtag("getSingleReadSVCandidates");
     log_os << logtag << " post-indels candidate_size: " << candidates.size() << "\n";
 #endif
 
