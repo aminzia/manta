@@ -212,6 +212,7 @@ struct SVLocusScanner
     struct CachedReadGroupStats
     {
         CachedReadGroupStats() :
+            minCloseFragmentSize(0),
             minFarFragmentSize(0)
         {}
 
