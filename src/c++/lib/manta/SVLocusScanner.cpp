@@ -680,7 +680,7 @@ getSVCandidatesFromPair(
         {
             static const float nonDistantSizeReduction(0.4);
             static const float nonDistantSRComp(1.-nonDistantSizeReduction);
-            breakendSize *= (nonDistantSizeReduction + (nonDistantSRComp*distantFraction));
+            breakendSize = static_cast<pos_t>(breakendSize * (nonDistantSizeReduction + (nonDistantSRComp*distantFraction)));
         }
 
         localBreakend.interval.tid = (localRead.target_id());
