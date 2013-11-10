@@ -21,6 +21,7 @@
 
 #include "blt_util/bam_record.hh"
 #include "blt_util/bam_record_util.hh"
+#include "blt_util/circularCounter.hh"
 #include "manta/ReadGroupStatsSet.hh"
 #include "manta/SVCandidate.hh"
 #include "svgraph/SVLocus.hh"
@@ -30,6 +31,19 @@
 #include <vector>
 
 
+namespace FragmentSizeType
+{
+    enum index_t
+    {
+        COMPRESSED,
+        NORMAL,
+        VERYCLOSE,
+        CLOSE,
+        DISTANT
+    };
+}
+
+
 /// The counts in the SVLocus Graph represent an abstract weight of evidence supporting each edge/node.
 ///
 /// To support large and small-scale evidence in a single graph, we need to allow for different weightings
@@ -37,17 +51,14 @@
 ///
 struct SVObservationWeights
 {
-    // input evidence:
-    static const unsigned readPair = 6;
-    static const unsigned closeReadPair = 2;
-    static const unsigned reallyCloseReadPair = 1;
-    static const unsigned internalReadEvent = 6; ///< indels, soft-clip, etc.
-
-    static const float closePairFactor; ///< fragments within this factor of the minimum size cutoff are treated as 'close' pairs and receive a modified evidence count
-    static const float reallyClosePairFactor; ///< fragments within this factor of the minimum size cutoff are treated as 'reallyClose' pairs and receive a modified evidence count
-
     // noise reduction:
-    static const unsigned observation = 6; ///< 'average' observation weight, this is used to scale noise filtration, but not for any evidence type
+    static const unsigned observation = 3; ///< 'average' observation weight, this is used to scale noise filtration, but not for any evidence type
+
+    // input evidence:
+    static const unsigned readPair = observation;
+    static const unsigned closeReadPair = 1;
+    static const unsigned veryCloseReadPair = 1;
+    static const unsigned internalReadEvent = observation; ///< indels, soft-clip, etc.
 };
 
 
@@ -120,6 +131,12 @@ struct SVLocusScanner
         const bam_record& bamRead,
         const unsigned defaultReadGroupIndex) const;
 
+    /// fragments sizes get thrown is serveral pre-defined categories:
+    FragmentSizeType::index_t
+    getFragmentSizeType(
+        const bam_record& bamRead,
+        const unsigned defaultReadGroupIndex) const;
+
     /// test whether a fragment is significantly larger than expected
     ///
     /// this function is useful to eliminate reads which fail the ProperPair test
@@ -130,11 +147,30 @@ struct SVLocusScanner
         const bam_record& bamRead,
         const unsigned defaultReadGroupIndex) const;
 
-    /// return true if the read is anomalous, for any anomaly type besides being a short innie read:
+    /// test whether a fragment is significantly larger than expected and subsample borderline cases
+    ///
+    /// this behaves like isLargeFragment, except that fragments very close the non-amolous size are
+    /// fitered unless they occur at high density
+    ///
     bool
-    isNonShortAnomalous(
+    isSampledLargeFragment(
         const bam_record& bamRead,
         const unsigned defaultReadGroupIndex) const;
+
+
+    /// return true if the read is anomalous, for any anomaly type besides being a short innie read:
+    bool
+    isNonCompressedAnomalous(
+        const bam_record& bamRead,
+        const unsigned defaultReadGroupIndex) const;
+
+    /// return true if the read is anomalous, for any anomaly type besides being a short innie fragment,
+    /// with subsampling for very short fragments
+    bool
+    isSampledNonCompressedAnomalous(
+        const bam_record& bamRead,
+        const unsigned defaultReadGroupIndex) const;
+
 
     /// \brief is the read likely to indicate the presence of a small SV?
     ///
@@ -213,7 +249,8 @@ struct SVLocusScanner
     {
         CachedReadGroupStats() :
             minCloseFragmentSize(0),
-            minFarFragmentSize(0)
+            minDistantFragmentSize(0),
+            distantFactor(0)
         {}
 
         /// fragment size range assumed for the purpose of creating SVLocusGraph regions
@@ -225,7 +262,9 @@ struct SVLocusScanner
         Range evidencePair;
 
         int minCloseFragmentSize; ///< beyond the properPair anomalous threshold, there is a threshold to distinguish 'really-close' and 'close' pairs for the purpose of evidence weight
-        int minFarFragmentSize; ///< beyond the properPair anomalous threshold, there is a threshold to distinguish close and far pairs for the purpose of evidence weight
+        int minDistantFragmentSize; ///< beyond the properPair anomalous threshold, there is a threshold to distinguish close and far pairs for the purpose of evidence weight
+
+        float distantFactor; ///< precomputed value used to scale down breakend size as fragments get smaller
     };
 
 private:
@@ -237,6 +276,8 @@ private:
     ReadGroupStatsSet _rss;
 
     std::vector<CachedReadGroupStats> _stats;
+
+    mutable circularCounter _veryClosePairTracker;
 
 //    std::string lastQname;
 //    uint8_t lastMapq;

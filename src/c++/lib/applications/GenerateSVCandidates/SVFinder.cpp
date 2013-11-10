@@ -78,7 +78,7 @@ addSVNodeRead(
 
     if (scanner.isReadFiltered(bamRead)) return;
 
-    const bool isNonShortAnomalous(scanner.isNonShortAnomalous(bamRead,bamIndex));
+    const bool isNonShortAnomalous(scanner.isNonCompressedAnomalous(bamRead,bamIndex));
 
     bool isLocalAssemblyEvidence(false);
     if (! isNonShortAnomalous)

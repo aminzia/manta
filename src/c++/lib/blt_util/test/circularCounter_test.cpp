@@ -37,4 +37,3 @@ BOOST_AUTO_TEST_CASE( test_circularCounter1 )
 
 
 BOOST_AUTO_TEST_SUITE_END()
-

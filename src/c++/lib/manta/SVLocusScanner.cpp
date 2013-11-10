@@ -40,8 +40,51 @@
 #endif
 
 
-const float SVObservationWeights::closePairFactor(4);
-const float SVObservationWeights::reallyClosePairFactor(1.5);
+/// used for classifying fragments based on size so that they can be treated differently
+///
+namespace FragmentSizeType
+{
+    static const float closePairFactor(4); ///< fragments within this factor of the minimum size cutoff are treated as 'close' pairs and receive a modified evidence count
+    static const float veryClosePairFactor(2); ///< fragments within this factor of the minimum size cutoff are treated as 'reallyClose' pairs and receive a modified evidence count
+
+    static
+    index_t
+    classifySize(
+        const SVLocusScanner::CachedReadGroupStats& rgStats,
+        const unsigned fragmentSize)
+    {
+        if (fragmentSize < rgStats.properPair.min) return COMPRESSED;
+        if (fragmentSize > rgStats.properPair.max)
+        {
+            if (static_cast<int>(fragmentSize) < rgStats.minCloseFragmentSize) return VERYCLOSE;
+            if (static_cast<int>(fragmentSize) < rgStats.minDistantFragmentSize) return CLOSE;
+            return DISTANT;
+        }
+        return NORMAL;
+    }
+
+    static
+    bool
+    isLarge(const index_t i)
+    {
+        switch(i)
+        {
+        case NORMAL:
+        case COMPRESSED:
+            return false;
+        default:
+            return true;
+        }
+    }
+}
+
+
+
+/// this term affects depth-dependent subsampling of reallyclosePairs:
+///
+/// TODO: reorganize this information into some kind of 'close pair' handling object
+///
+const unsigned reallyClosePairCycleSize(100);
 
 
 
@@ -588,7 +631,13 @@ getSVCandidatesFromPair(
 
     const pos_t totalNoninsertSize(thisReadNoninsertSize+remoteReadNoninsertSize);
 
-    bool isReallyClose(false);
+    /// is a fragment a close innie expansion? In this case we dial the breakend size down
+    /// according to a linear scale from the 'distant' threshold to the non-anomolous threshold.
+    ///
+    /// to engage this size reduction, isNonDistant must be true, and distantFraciton of 0 gets full
+    /// penalized short size, distantFraction of 1 gets regular breakend sizes.
+    bool isNonDistant(false);
+    float distantFraction(1.);
 
     // check if fragment size is still anomalous after accounting for read alignment patterns:
     if (localRead.target_id() == localRead.mate_target_id())
@@ -605,9 +654,17 @@ getSVCandidatesFromPair(
 
             if (! (isLargeFragment || isOuttie)) return;
 
-            // 'really-close' fragments are so close to the non-anomolous threshold that we reduce the breakend region to reduce any
+            // 'really-close' fragments are so close to the non-anomalous threshold that we reduce the breakend region to reduce any
             // transitive chaining behavior:
-            isReallyClose = (cigarAdjustedFragmentSize < rstats.minCloseFragmentSize);
+            if (isLargeFragment)
+            {
+                isNonDistant = (cigarAdjustedFragmentSize < rstats.minDistantFragmentSize);
+                if (isNonDistant)
+                {
+                    distantFraction = (cigarAdjustedFragmentSize - rstats.properPair.max) * rstats.distantFactor;
+                    assert((distantFraction >= 0) && (distantFraction<1.));
+                }
+            }
         }
     }
 
@@ -618,7 +675,13 @@ getSVCandidatesFromPair(
             static_cast<pos_t>(opt.minPairBreakendSize),
             static_cast<pos_t>(rstats.breakendRegion.max-totalNoninsertSize)));
 
-        if (isReallyClose) breakendSize /= 2;
+        // adjust breakend size as a function of fragmentSize when we start to approach the non-anomalous threshold:
+        if (isNonDistant)
+        {
+            static const float nonDistantSizeReduction(0.4);
+            static const float nonDistantSRComp(1.-nonDistantSizeReduction);
+            breakendSize *= (nonDistantSizeReduction + (nonDistantSRComp*distantFraction));
+        }
 
         localBreakend.interval.tid = (localRead.target_id());
         // expected breakpoint range is from the end of the localRead alignment to the (probabilistic) end of the fragment:
@@ -753,12 +816,10 @@ getSingleReadSVCandidates(
 
     // - process any large indels in the localRead:
     getSVCandidatesFromReadIndels(opt, dopt, localAlign, candidates);
-
 #ifdef DEBUG_SCANNER
     static const std::string logtag("getSingleReadSVCandidates");
     log_os << logtag << " post-indels candidate_size: " << candidates.size() << "\n";
 #endif
-
 
     // - process soft-clip in the localRead:
     getSVCandidatesFromReadClip(opt, localRead, localAlign, candidates);
@@ -944,17 +1005,15 @@ getSVLociImpl(
         }
         else if (localBreakend.getLocalPairCount() != 0)
         {
-            bool isReallyClose(false);
-            bool isClose(false);
+            FragmentSizeType::index_t ftype(FragmentSizeType::NORMAL);
             if (is_innie_pair(bamRead))
             {
-                isReallyClose = (std::abs(bamRead.template_size()) < rstats.minCloseFragmentSize);
-                isClose = (std::abs(bamRead.template_size()) < rstats.minFarFragmentSize);
+                ftype = FragmentSizeType::classifySize(rstats,std::abs(bamRead.template_size()));
             }
 
             unsigned thisWeight(SVObservationWeights::readPair);
-            if (isClose) thisWeight = SVObservationWeights::closeReadPair;
-            if (isReallyClose) thisWeight = SVObservationWeights::reallyCloseReadPair;
+            if (FragmentSizeType::CLOSE == ftype) thisWeight = SVObservationWeights::closeReadPair;
+            if (FragmentSizeType::VERYCLOSE == ftype) thisWeight = SVObservationWeights::veryCloseReadPair;
 
             localEvidenceWeight = thisWeight;
             if (remoteBreakend.getLocalPairCount() != 0)
@@ -1010,7 +1069,9 @@ SVLocusScanner(
     const std::string& statsFilename,
     const std::vector<std::string>& alignmentFilename) :
     _opt(opt),
-    _dopt(opt)
+    _dopt(opt),
+    _veryClosePairTracker(reallyClosePairCycleSize)
+
 {
     using namespace illumina::common;
 
@@ -1032,13 +1093,16 @@ SVLocusScanner(
         const ReadGroupStats rgs(_rss.getStats(*index));
 
         _stats.resize(_stats.size()+1);
-        CachedReadGroupStats& stat(_stats.back());
-        setRGRange(rgs.fragStats, _opt.breakendEdgeTrimProb, stat.breakendRegion);
-        setRGRange(rgs.fragStats, _opt.properPairTrimProb, stat.properPair);
-        setRGRange(rgs.fragStats, _opt.evidenceTrimProb, stat.evidencePair);
+        CachedReadGroupStats& rgStats(_stats.back());
+        setRGRange(rgs.fragStats, _opt.breakendEdgeTrimProb, rgStats.breakendRegion);
+        setRGRange(rgs.fragStats, _opt.properPairTrimProb, rgStats.properPair);
+        setRGRange(rgs.fragStats, _opt.evidenceTrimProb, rgStats.evidencePair);
 
-        stat.minCloseFragmentSize = static_cast<int>(stat.properPair.max*SVObservationWeights::reallyClosePairFactor);
-        stat.minFarFragmentSize = static_cast<int>(stat.properPair.max*SVObservationWeights::closePairFactor);
+        rgStats.minCloseFragmentSize = static_cast<int>(rgStats.properPair.max*FragmentSizeType::veryClosePairFactor);
+        rgStats.minDistantFragmentSize = static_cast<int>(rgStats.properPair.max*FragmentSizeType::closePairFactor);
+
+        assert(rgStats.minDistantFragmentSize > rgStats.properPair.max);
+        rgStats.distantFactor = 1. / static_cast<float>(rgStats.minDistantFragmentSize - rgStats.properPair.max);
     }
 }
 
@@ -1076,6 +1140,18 @@ isProperPair(
 }
 
 
+FragmentSizeType::index_t
+SVLocusScanner::
+getFragmentSizeType(
+    const bam_record& bamRead,
+    const unsigned defaultReadGroupIndex) const
+{
+    using namespace FragmentSizeType;
+    if (bamRead.target_id() != bamRead.mate_target_id()) return DISTANT;
+    const int32_t fragmentSize(std::abs(bamRead.template_size()));
+    return classifySize(_stats[defaultReadGroupIndex], fragmentSize);
+}
+
 
 bool
 SVLocusScanner::
@@ -1083,24 +1159,56 @@ isLargeFragment(
     const bam_record& bamRead,
     const unsigned defaultReadGroupIndex) const
 {
-    if (bamRead.target_id() != bamRead.mate_target_id()) return true;
-
-    const Range& ppr(_stats[defaultReadGroupIndex].properPair);
-    const int32_t fragmentSize(std::abs(bamRead.template_size()));
-    return (fragmentSize > ppr.max);
+    return FragmentSizeType::isLarge(getFragmentSizeType(bamRead,defaultReadGroupIndex));
 }
-
 
 
 bool
 SVLocusScanner::
-isNonShortAnomalous(
+isSampledLargeFragment(
+    const bam_record& bamRead,
+    const unsigned defaultReadGroupIndex) const
+{
+    using namespace FragmentSizeType;
+
+    const index_t ftype(getFragmentSizeType(bamRead,defaultReadGroupIndex));
+
+    const bool isVeryClose(VERYCLOSE == ftype);
+    _veryClosePairTracker.push(isVeryClose);
+    if (isVeryClose)
+    {
+        if(1 == _veryClosePairTracker.count()) return false;
+    }
+
+    return isLarge(ftype);
+}
+
+
+bool
+SVLocusScanner::
+isNonCompressedAnomalous(
     const bam_record& bamRead,
     const unsigned defaultReadGroupIndex) const
 {
     const bool isAnomalous(! isProperPair(bamRead,defaultReadGroupIndex));
     const bool isInnie(is_innie_pair(bamRead));
     const bool isLarge(isLargeFragment(bamRead,defaultReadGroupIndex));
+
+    // exclude innie read pairs which are anomalously short:
+    return (isAnomalous && ((! isInnie) || isLarge));
+}
+
+
+
+bool
+SVLocusScanner::
+isSampledNonCompressedAnomalous(
+    const bam_record& bamRead,
+    const unsigned defaultReadGroupIndex) const
+{
+    const bool isAnomalous(! isProperPair(bamRead,defaultReadGroupIndex));
+    const bool isInnie(is_innie_pair(bamRead));
+    const bool isLarge(isSampledLargeFragment(bamRead,defaultReadGroupIndex));
 
     // exclude innie read pairs which are anomalously short:
     return (isAnomalous && ((! isInnie) || isLarge));

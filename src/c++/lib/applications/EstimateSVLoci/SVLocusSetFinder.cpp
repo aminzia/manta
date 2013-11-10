@@ -181,7 +181,7 @@ update(
     if (_readScanner.isReadFiltered(bamRead)) return;
 
     // exclude innie read pairs which are anomalously short:
-    const bool isNonShortAnomalous(_readScanner.isNonShortAnomalous(bamRead,defaultReadGroupIndex));
+    const bool isNonShortAnomalous(_readScanner.isSampledNonCompressedAnomalous(bamRead,defaultReadGroupIndex));
 
     if (isNonShortAnomalous) ++_anomCount;
     else                     ++_nonAnomCount;
