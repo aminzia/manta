@@ -155,8 +155,8 @@ struct SVLocusScanner
     bool
     isSampledLargeFragment(
         const bam_record& bamRead,
-        const unsigned defaultReadGroupIndex) const;
-
+        const unsigned defaultReadGroupIndex,
+        bool& isVeryClose) const;
 
     /// return true if the read is anomalous, for any anomaly type besides being a short innie read:
     bool
@@ -169,8 +169,8 @@ struct SVLocusScanner
     bool
     isSampledNonCompressedAnomalous(
         const bam_record& bamRead,
-        const unsigned defaultReadGroupIndex) const;
-
+        const unsigned defaultReadGroupIndex,
+        bool& isVeryCloseInnie) const;
 
     /// \brief is the read likely to indicate the presence of a small SV?
     ///
@@ -250,7 +250,7 @@ struct SVLocusScanner
         CachedReadGroupStats() :
             minCloseFragmentSize(0),
             minDistantFragmentSize(0),
-            distantFactor(0)
+            veryCloseFactor(0)
         {}
 
         /// fragment size range assumed for the purpose of creating SVLocusGraph regions
@@ -264,7 +264,7 @@ struct SVLocusScanner
         int minCloseFragmentSize; ///< beyond the properPair anomalous threshold, there is a threshold to distinguish 'really-close' and 'close' pairs for the purpose of evidence weight
         int minDistantFragmentSize; ///< beyond the properPair anomalous threshold, there is a threshold to distinguish close and far pairs for the purpose of evidence weight
 
-        float distantFactor; ///< precomputed value used to scale down breakend size as fragments get smaller
+        float veryCloseFactor; ///< precomputed value used to scale down breakend size as fragments get smaller
     };
 
 private:

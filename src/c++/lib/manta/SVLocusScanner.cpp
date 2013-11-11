@@ -84,7 +84,7 @@ namespace FragmentSizeType
 ///
 /// TODO: reorganize this information into some kind of 'close pair' handling object
 ///
-const unsigned reallyClosePairCycleSize(100);
+const unsigned reallyClosePairCycleSize(40);
 
 
 
@@ -636,8 +636,8 @@ getSVCandidatesFromPair(
     ///
     /// to engage this size reduction, isNonDistant must be true, and distantFraciton of 0 gets full
     /// penalized short size, distantFraction of 1 gets regular breakend sizes.
-    bool isNonDistant(false);
-    float distantFraction(1.);
+    bool isVeryClose(false);
+    float veryCloseFraction(1.);
 
     // check if fragment size is still anomalous after accounting for read alignment patterns:
     if (localRead.target_id() == localRead.mate_target_id())
@@ -658,11 +658,11 @@ getSVCandidatesFromPair(
             // transitive chaining behavior:
             if (isLargeFragment)
             {
-                isNonDistant = (cigarAdjustedFragmentSize < rstats.minDistantFragmentSize);
-                if (isNonDistant)
+                isVeryClose = (cigarAdjustedFragmentSize < rstats.minCloseFragmentSize);
+                if (isVeryClose)
                 {
-                    distantFraction = (cigarAdjustedFragmentSize - rstats.properPair.max) * rstats.distantFactor;
-                    assert((distantFraction >= 0) && (distantFraction<1.));
+                    veryCloseFraction = (cigarAdjustedFragmentSize - rstats.properPair.max) * rstats.veryCloseFactor;
+                    assert((veryCloseFraction >= 0) && (veryCloseFraction<1.));
                 }
             }
         }
@@ -676,11 +676,11 @@ getSVCandidatesFromPair(
             static_cast<pos_t>(rstats.breakendRegion.max-totalNoninsertSize)));
 
         // adjust breakend size as a function of fragmentSize when we start to approach the non-anomalous threshold:
-        if (isNonDistant)
+        if (isVeryClose)
         {
-            static const float nonDistantSizeReduction(0.4);
+            static const float nonDistantSizeReduction(0.05);
             static const float nonDistantSRComp(1.-nonDistantSizeReduction);
-            breakendSize = static_cast<pos_t>(breakendSize * (nonDistantSizeReduction + (nonDistantSRComp*distantFraction)));
+            breakendSize = static_cast<pos_t>(breakendSize * (nonDistantSizeReduction + (nonDistantSRComp*veryCloseFraction)));
         }
 
         localBreakend.interval.tid = (localRead.target_id());
@@ -1102,7 +1102,7 @@ SVLocusScanner(
         rgStats.minDistantFragmentSize = static_cast<int>(rgStats.properPair.max*FragmentSizeType::closePairFactor);
 
         assert(rgStats.minDistantFragmentSize > rgStats.properPair.max);
-        rgStats.distantFactor = 1. / static_cast<float>(rgStats.minDistantFragmentSize - rgStats.properPair.max);
+        rgStats.veryCloseFactor = (1. / static_cast<float>(rgStats.minCloseFragmentSize - rgStats.properPair.max));
     }
 }
 
@@ -1167,15 +1167,20 @@ bool
 SVLocusScanner::
 isSampledLargeFragment(
     const bam_record& bamRead,
-    const unsigned defaultReadGroupIndex) const
+    const unsigned defaultReadGroupIndex,
+    bool& isRemoveCandidate) const
 {
     using namespace FragmentSizeType;
 
     const index_t ftype(getFragmentSizeType(bamRead,defaultReadGroupIndex));
 
+    /// TODO: this feature has evolved in such a way that it's now obvious it does
+    /// not belong in SVLocusScanner but in the client code of this function --
+    /// move this logic out.
     const bool isVeryClose(VERYCLOSE == ftype);
-    _veryClosePairTracker.push(isVeryClose);
-    if (isVeryClose)
+    _veryClosePairTracker.push(isRemoveCandidate);
+    isRemoveCandidate=((isVeryClose) && (bamRead.pos() < bamRead.mate_pos()));
+    if (isRemoveCandidate)
     {
         if(1 == _veryClosePairTracker.count()) return false;
     }
@@ -1204,11 +1209,14 @@ bool
 SVLocusScanner::
 isSampledNonCompressedAnomalous(
     const bam_record& bamRead,
-    const unsigned defaultReadGroupIndex) const
+    const unsigned defaultReadGroupIndex,
+    bool& isVeryCloseInnie) const
 {
     const bool isAnomalous(! isProperPair(bamRead,defaultReadGroupIndex));
     const bool isInnie(is_innie_pair(bamRead));
-    const bool isLarge(isSampledLargeFragment(bamRead,defaultReadGroupIndex));
+    const bool isLarge(isSampledLargeFragment(bamRead,defaultReadGroupIndex, isVeryCloseInnie));
+
+    isVeryCloseInnie = (isVeryCloseInnie && isInnie);
 
     // exclude innie read pairs which are anomalously short:
     return (isAnomalous && ((! isInnie) || isLarge));

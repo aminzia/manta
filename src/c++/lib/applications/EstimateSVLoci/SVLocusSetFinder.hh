@@ -114,5 +114,8 @@ private:
 
     unsigned _anomCount;
     unsigned _nonAnomCount;
-};
 
+    typedef std::set<std::string> RejectSetType;
+    typedef std::map<pos_t,RejectSetType> RejectMapType;
+    RejectMapType _rejectMap;
+};
