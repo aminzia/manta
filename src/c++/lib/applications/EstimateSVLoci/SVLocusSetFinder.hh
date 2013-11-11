@@ -119,5 +119,9 @@ private:
 
     bool _isMaxDepth;
     float _maxDepth;
+
+    typedef std::set<std::string> RejectSetType;
+    typedef std::map<pos_t,RejectSetType> RejectMapType;
+    RejectMapType _rejectMap;
 };
 

@@ -21,6 +21,7 @@
 
 #include "blt_util/bam_record.hh"
 #include "blt_util/bam_record_util.hh"
+#include "blt_util/circularCounter.hh"
 #include "manta/ReadGroupStatsSet.hh"
 #include "manta/SVCandidate.hh"
 #include "svgraph/SVLocus.hh"
@@ -150,11 +151,32 @@ struct SVLocusScanner
         const bam_record& bamRead,
         const unsigned defaultReadGroupIndex) const;
 
+    /// test whether a fragment is significantly larger than expected and subsample borderline cases
+    ///
+    /// this behaves like isLargeFragment, except that fragments very close the non-amolous size are
+    /// fitered unless they occur at high density
+    ///
+    bool
+    isSampledLargeFragment(
+        const bam_record& bamRead,
+        const unsigned defaultReadGroupIndex,
+        bool& isVeryClose,
+        bool& isLeftMost) const;
+
     /// return true if the read is anomalous, for any anomaly type besides being a short innie read:
     bool
     isNonCompressedAnomalous(
         const bam_record& bamRead,
         const unsigned defaultReadGroupIndex) const;
+
+    /// return true if the read is anomalous, for any anomaly type besides being a short innie fragment,
+    /// with subsampling for very short fragments
+    bool
+    isSampledNonCompressedAnomalous(
+        const bam_record& bamRead,
+        const unsigned defaultReadGroupIndex,
+        bool& isVeryCloseInnie,
+        bool& isLeftMost) const;
 
     /// \brief is the read likely to indicate the presence of a small SV?
     ///
@@ -264,6 +286,8 @@ private:
     ReadGroupStatsSet _rss;
 
     std::vector<CachedReadGroupStats> _stats;
+
+    mutable circularCounter _veryClosePairTracker;
 
 //    std::string lastQname;
 //    uint8_t lastMapq;

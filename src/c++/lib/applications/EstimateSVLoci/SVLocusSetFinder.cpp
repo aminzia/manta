@@ -136,11 +136,20 @@ process_pos(const int stage_no,
     }
     else if (stage_no == STAGE::DENOISE)
     {
+        {
+            /// hijack denoise stage for a second use that fits a similar staging pattern --
+            // clearing any long-term build up in the rejectMap:
+            const RejectMapType::iterator miter(_rejectMap.find(pos));
+            if (miter != _rejectMap.end())
+            {
+                _rejectMap.erase(miter);
+            }
+        }
+
         static const pos_t denoiseMinChunk(1000);
 
         if (_denoiseRegion.range.is_pos_intersect(pos))
         {
-
 #ifdef DEBUG_SFINDER
             log_os << "SFinder::process_pos pos intersect. pos: " << pos << " dnRegion: " << _denoiseRegion << " is in region: " << _isInDenoiseRegion << "\n";
 #endif
@@ -244,7 +253,9 @@ update(
     }
 
     // exclude innie read pairs which are anomalously short:
-    const bool isNonCompressedAnomalous(_readScanner.isNonCompressedAnomalous(bamRead,defaultReadGroupIndex));
+    bool isVeryCloseInnie(false);
+    bool isLeftMost(false);
+    const bool isNonCompressedAnomalous(_readScanner.isSampledNonCompressedAnomalous(bamRead,defaultReadGroupIndex,isVeryCloseInnie,isLeftMost));
 
     if (isNonCompressedAnomalous) _svLoci.getReadCounts(isTumor).anom++;
     else                          _svLoci.getReadCounts(isTumor).nonAnom++;
@@ -255,7 +266,33 @@ update(
         isLocalAssemblyEvidence = _readScanner.isLocalAssemblyEvidence(bamRead, refSeq);
     }
 
-    const bool isRejectRead(! ( isNonCompressedAnomalous || isLocalAssemblyEvidence));
+    bool isRejectRead(! ( isNonShortAnomalous || isLocalAssemblyEvidence));
+
+    if (isVeryCloseInnie)
+    {
+        if (isRejectRead)
+        {
+            /// record mate_pos delete check:
+            if (bamRead.mate_pos() > bamRead.pos())
+            {
+                _rejectMap[bamRead.mate_pos()].insert(bamRead.qname());
+            }
+        }
+        else if (! isLeftMost)
+        {
+            const RejectMapType::iterator miter(_rejectMap.find(bamRead.pos()));
+            if (miter != _rejectMap.end())
+            {
+                RejectSetType& mset(miter->second);
+                if (mset.count(bamRead.qname()))
+                {
+                    isRejectRead=true;
+                    mset.erase(bamRead.qname());
+                    if (mset.empty()) _rejectMap.erase(miter);
+                }
+            }
+        }
+    }
 
     if (isRejectRead)
     {

@@ -1,3 +1,5 @@
+- MANTA-67 Include 'nearly-anomalous' paired-reads to improve detection of
+variants (esp deletions) in the 50-500 base range.
 v0.19.0
 - MANTA-127 RG based insert stats (default off) 
 - MANTA-128 Improved pair orientation estimation and error checks
