@@ -156,7 +156,8 @@ struct SVLocusScanner
     isSampledLargeFragment(
         const bam_record& bamRead,
         const unsigned defaultReadGroupIndex,
-        bool& isVeryClose) const;
+        bool& isVeryClose,
+        bool& isLeftMost) const;
 
     /// return true if the read is anomalous, for any anomaly type besides being a short innie read:
     bool
@@ -170,7 +171,8 @@ struct SVLocusScanner
     isSampledNonCompressedAnomalous(
         const bam_record& bamRead,
         const unsigned defaultReadGroupIndex,
-        bool& isVeryCloseInnie) const;
+        bool& isVeryCloseInnie,
+        bool& isLeftMost) const;
 
     /// \brief is the read likely to indicate the presence of a small SV?
     ///

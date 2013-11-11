@@ -45,7 +45,7 @@
 namespace FragmentSizeType
 {
     static const float closePairFactor(4); ///< fragments within this factor of the minimum size cutoff are treated as 'close' pairs and receive a modified evidence count
-    static const float veryClosePairFactor(2); ///< fragments within this factor of the minimum size cutoff are treated as 'reallyClose' pairs and receive a modified evidence count
+    static const float veryClosePairFactor(1.6); ///< fragments within this factor of the minimum size cutoff are treated as 'reallyClose' pairs and receive a modified evidence count
 
     static
     index_t
@@ -84,7 +84,7 @@ namespace FragmentSizeType
 ///
 /// TODO: reorganize this information into some kind of 'close pair' handling object
 ///
-const unsigned reallyClosePairCycleSize(40);
+const unsigned reallyClosePairCycleSize(25);
 
 
 
@@ -1098,6 +1098,9 @@ SVLocusScanner(
         setRGRange(rgs.fragStats, _opt.properPairTrimProb, rgStats.properPair);
         setRGRange(rgs.fragStats, _opt.evidenceTrimProb, rgStats.evidencePair);
 
+        static const float maxAnomFactor(1.1);
+        rgStats.properPair.max *= maxAnomFactor;
+
         rgStats.minCloseFragmentSize = static_cast<int>(rgStats.properPair.max*FragmentSizeType::veryClosePairFactor);
         rgStats.minDistantFragmentSize = static_cast<int>(rgStats.properPair.max*FragmentSizeType::closePairFactor);
 
@@ -1133,8 +1136,7 @@ isProperPair(
     const int32_t fragmentSize(std::abs(bamRead.template_size()));
 
     /// we're seeing way to much large fragment garbage in cancers to use the normal proper pair criteria, push the max fragment size out a bit for now:
-    static const float maxAnomFactor(1.0);
-    if ((fragmentSize > static_cast<int32_t>(maxAnomFactor*ppr.max)) || (fragmentSize < ppr.min)) return false;
+    if ((fragmentSize > ppr.max) || (fragmentSize < ppr.min)) return false;
 
     return true;
 }
@@ -1163,12 +1165,25 @@ isLargeFragment(
 }
 
 
+
+/// select in such a way that we only get one read -- the left-most read or read1 from each pair fragment:
+static
+bool
+isBamRecordLeftMost(
+    const bam_record& bamRead)
+{
+    return ((bamRead.pos() < bamRead.mate_pos()) || ((bamRead.pos() == bamRead.mate_pos()) && (bamRead.read_no() == 1)));
+}
+
+
+
 bool
 SVLocusScanner::
 isSampledLargeFragment(
     const bam_record& bamRead,
     const unsigned defaultReadGroupIndex,
-    bool& isRemoveCandidate) const
+    bool& isVeryClose,
+    bool& isLeftMost) const
 {
     using namespace FragmentSizeType;
 
@@ -1177,12 +1192,17 @@ isSampledLargeFragment(
     /// TODO: this feature has evolved in such a way that it's now obvious it does
     /// not belong in SVLocusScanner but in the client code of this function --
     /// move this logic out.
-    const bool isVeryClose(VERYCLOSE == ftype);
-    _veryClosePairTracker.push(isRemoveCandidate);
-    isRemoveCandidate=((isVeryClose) && (bamRead.pos() < bamRead.mate_pos()));
-    if (isRemoveCandidate)
+    isVeryClose=(VERYCLOSE == ftype);
+    isLeftMost=isBamRecordLeftMost(bamRead);
+    if (isLeftMost)
     {
-        if(1 == _veryClosePairTracker.count()) return false;
+        _veryClosePairTracker.push(isVeryClose);
+        if (isVeryClose)
+        {
+            if(1 == _veryClosePairTracker.count()) {
+                return false;
+            }
+        }
     }
 
     return isLarge(ftype);
@@ -1210,11 +1230,12 @@ SVLocusScanner::
 isSampledNonCompressedAnomalous(
     const bam_record& bamRead,
     const unsigned defaultReadGroupIndex,
-    bool& isVeryCloseInnie) const
+    bool& isVeryCloseInnie,
+    bool& isLeftMost) const
 {
     const bool isAnomalous(! isProperPair(bamRead,defaultReadGroupIndex));
     const bool isInnie(is_innie_pair(bamRead));
-    const bool isLarge(isSampledLargeFragment(bamRead,defaultReadGroupIndex, isVeryCloseInnie));
+    const bool isLarge(isSampledLargeFragment(bamRead,defaultReadGroupIndex, isVeryCloseInnie, isLeftMost));
 
     isVeryCloseInnie = (isVeryCloseInnie && isInnie);
 

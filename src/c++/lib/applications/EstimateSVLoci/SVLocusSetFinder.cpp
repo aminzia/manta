@@ -190,8 +190,9 @@ update(
     if (_readScanner.isReadFiltered(bamRead)) return;
 
     // exclude innie read pairs which are anomalously short:
-    bool isRemoveCandidate(false);
-    const bool isNonShortAnomalous(_readScanner.isSampledNonCompressedAnomalous(bamRead,defaultReadGroupIndex,isRemoveCandidate));
+    bool isVeryCloseInnie(false);
+    bool isLeftMost(false);
+    const bool isNonShortAnomalous(_readScanner.isSampledNonCompressedAnomalous(bamRead,defaultReadGroupIndex,isVeryCloseInnie,isLeftMost));
 
     if (isNonShortAnomalous) ++_anomCount;
     else                     ++_nonAnomCount;
@@ -204,7 +205,7 @@ update(
 
     bool isRejectRead(! ( isNonShortAnomalous || isLocalAssemblyEvidence));
 
-    if (isRemoveCandidate)
+    if (isVeryCloseInnie)
     {
         if (isRejectRead)
         {
@@ -214,7 +215,7 @@ update(
                 _rejectMap[bamRead.mate_pos()].insert(bamRead.qname());
             }
         }
-        else
+        else if (! isLeftMost)
         {
             const RejectMapType::iterator miter(_rejectMap.find(bamRead.pos()));
             if (miter != _rejectMap.end())
@@ -224,11 +225,7 @@ update(
                 {
                     isRejectRead=true;
                     mset.erase(bamRead.qname());
-                }
-
-                if (mset.empty())
-                {
-                    _rejectMap.erase(miter);
+                    if (mset.empty()) _rejectMap.erase(miter);
                 }
             }
         }
