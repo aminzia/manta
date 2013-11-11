@@ -24,6 +24,7 @@
 #include "blt_util/parse_util.hh"
 #include "blt_util/string_util.hh"
 #include "common/Exceptions.hh"
+#include "manta/SVCandidateUtil.hh"
 #include "manta/SVLocusScanner.hh"
 #include "manta/SVLocusScannerSemiAligned.hh"
 
@@ -626,7 +627,7 @@ getSVCandidatesFromPair(
     }
     else
     {
-        insertRange.set_range(localStartRefPos,remoteEndRefPos);
+        insertRange.set_range(remoteEndRefPos,localStartRefPos);
     }
 
     const pos_t totalNoninsertSize(thisReadNoninsertSize+remoteReadNoninsertSize);
@@ -646,7 +647,6 @@ getSVCandidatesFromPair(
         {
             // get length of fragment after accounting for any variants described directly in either read alignment:
             const pos_t cigarAdjustedFragmentSize(totalNoninsertSize + (insertRange.end_pos() - insertRange.begin_pos()));
-
             const bool isLargeFragment(cigarAdjustedFragmentSize > rstats.properPair.max);
 
             // this is an arbitrary point to start officially tagging 'outties' -- for now  we just want to avoid conventional small fragments from FFPE
@@ -974,14 +974,13 @@ getSVLociImpl(
     // in the SV locus graph:
     BOOST_FOREACH(const SVCandidate& cand, candidates)
     {
+        const bool isCandComplex(isComplex(cand));
+
         const SVBreakend& localBreakend(cand.bp1);
         const SVBreakend& remoteBreakend(cand.bp2);
 
-        const bool isComplex((localBreakend.state == SVBreakendState::COMPLEX) &&
-                             (remoteBreakend.state == SVBreakendState::UNKNOWN));
-
         if ((0==localBreakend.interval.range.size()) ||
-            ((! isComplex) && (0==remoteBreakend.interval.range.size())))
+            ((! isCandComplex) && (0==remoteBreakend.interval.range.size())))
         {
             std::ostringstream oss;
             oss << "Unexpected breakend pattern proposed from bam record.\n"
@@ -1028,7 +1027,7 @@ getSVLociImpl(
         const NodeIndexType localBreakendNode(locus.addNode(localBreakend.interval));
         locus.setNodeEvidence(localBreakendNode,localEvidenceRange);
 
-        if (isComplex)
+        if (isCandComplex)
         {
             locus.linkNodes(localBreakendNode,localBreakendNode,localEvidenceWeight);
         }
@@ -1098,7 +1097,7 @@ SVLocusScanner(
         setRGRange(rgs.fragStats, _opt.properPairTrimProb, rgStats.properPair);
         setRGRange(rgs.fragStats, _opt.evidenceTrimProb, rgStats.evidencePair);
 
-        static const float maxAnomFactor(1.1);
+        static const float maxAnomFactor(1.2);
         rgStats.properPair.max *= maxAnomFactor;
 
         rgStats.minCloseFragmentSize = static_cast<int>(rgStats.properPair.max*FragmentSizeType::veryClosePairFactor);
