@@ -170,13 +170,14 @@ process_pos(const int stage_no,
 
 void
 SVLocusSetFinder::
-update(const bam_record& bamRead,
-       const unsigned defaultReadGroupIndex,
-       const std::map<std::string, int32_t>& chromToIndex)
+update(
+    const bam_record& bamRead,
+    const unsigned defaultReadGroupIndex,
+    const std::map<std::string, int32_t>& chromToIndex,
+    const reference_contig_segment& refSeq)
 {
     _isScanStarted=true;
 
-    // shortcut to speed things up:
     if (_readScanner.isReadFiltered(bamRead)) return;
 
     // exclude innie read pairs which are anomalously short:
@@ -188,7 +189,7 @@ update(const bam_record& bamRead,
     bool isLocalAssemblyEvidence(false);
     if (! isNonShortAnomalous)
     {
-        isLocalAssemblyEvidence = _readScanner.isLocalAssemblyEvidence(bamRead);
+        isLocalAssemblyEvidence = _readScanner.isLocalAssemblyEvidence(bamRead, refSeq);
     }
 
     if (! ( isNonShortAnomalous || isLocalAssemblyEvidence))
@@ -197,7 +198,6 @@ update(const bam_record& bamRead,
     }
 
 #ifdef DEBUG_SFINDER
-    isLocalAssemblyEvidence = _readScanner.isLocalAssemblyEvidence(bamRead);
     log_os << "SFinder: Accepted read. isAnomalous "  << isAnomalous << " is Local assm evidence: " << isLocalAssemblyEvidence << " read: " << bamRead << "\n";
 #endif
 
@@ -208,12 +208,11 @@ update(const bam_record& bamRead,
 
     std::vector<SVLocus> loci;
 
-    _readScanner.getSVLoci(bamRead, defaultReadGroupIndex, chromToIndex, loci);
+    _readScanner.getSVLoci(bamRead, defaultReadGroupIndex, chromToIndex, refSeq, loci);
 
     BOOST_FOREACH(const SVLocus& locus, loci)
     {
         if (locus.empty()) continue;
         _svLoci.merge(locus);
-        //std::cout << "LOCUS\t" << locus << "\n\n" << std::endl;
     }
 }

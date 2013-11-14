@@ -544,21 +544,26 @@ getJumpAssembly(
         }
     }
 
-    // assemble contig spanning the breakend:
-    _spanningAssembler.assembleSVBreakends(sv.bp1, sv.bp2, bporient.isBp1Reversed, bporient.isBp2Reversed, assemblyData.contigs);
-
-
     unsigned bp1LeadingTrim;
     unsigned bp1TrailingTrim;
     unsigned bp2LeadingTrim;
     unsigned bp2TrailingTrim;
-    getSVReferenceSegments(_opt.referenceFilename, _header, extraRefSize, sv, assemblyData.bp1ref, assemblyData.bp2ref,
-                           bp1LeadingTrim, bp1TrailingTrim, bp2LeadingTrim, bp2TrailingTrim);
+    getSVReferenceSegments(
+        _opt.referenceFilename, _header, extraRefSize, sv,
+        assemblyData.bp1ref, assemblyData.bp2ref,
+        bp1LeadingTrim, bp1TrailingTrim, bp2LeadingTrim, bp2TrailingTrim);
 
     pos_t align1LeadingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(bp1LeadingTrim)));
     pos_t align1TrailingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(bp1TrailingTrim)));
     pos_t align2LeadingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(bp2LeadingTrim)));
     pos_t align2TrailingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(bp2TrailingTrim)));
+
+    // assemble contig spanning the breakend:
+    _spanningAssembler.assembleSVBreakends(
+        sv.bp1, sv.bp2,
+        bporient.isBp1Reversed, bporient.isBp2Reversed,
+        assemblyData.bp1ref, assemblyData.bp2ref,
+        assemblyData.contigs);
 
     std::string bp1refSeq = assemblyData.bp1ref.seq();
     std::string bp2refSeq = assemblyData.bp2ref.seq();
@@ -735,9 +740,6 @@ getSmallSVAssembly(
 
     assemblyData.isSpanning = false;
 
-    // assemble contigs in the breakend region
-    _smallSVAssembler.assembleSingleSVBreakend(sv.bp1, assemblyData.contigs);
-
     // how much additional reference sequence should we extract from around
     // each side of the breakend region?
     static const pos_t extraRefEdgeSize(700);
@@ -758,6 +760,9 @@ getSmallSVAssembly(
     const pos_t trailingCut(std::max(0,extraRefSplitSize - static_cast<pos_t>(trailingTrim)));
 
     const std::string& align1RefStr(assemblyData.bp1ref.seq());
+
+    // assemble contigs in the breakend region
+    _smallSVAssembler.assembleSingleSVBreakend(sv.bp1, assemblyData.bp1ref, assemblyData.contigs);
 
 #ifdef DEBUG_REFINER
     log_os << logtag << "align1RefSize/Seq: " << align1RefStr.size() << '\n';

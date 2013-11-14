@@ -16,6 +16,7 @@
 ///
 
 #include "blt_util/bam_record_util.hh"
+#include "blt_util/align_path_bam_util.hh"
 
 
 
@@ -67,4 +68,14 @@ get_avg_quality(
     return (sum/len);
 }
 
+
+
+SimpleAlignment::
+SimpleAlignment(const bam_record& bamRead) :
+    is_fwd_strand(bamRead.is_fwd_strand()),
+    tid(bamRead.target_id()),
+    pos(bamRead.pos()-1)
+{
+    bam_cigar_to_apath(bamRead.raw_cigar(),bamRead.n_cigar(),path);
+}
 

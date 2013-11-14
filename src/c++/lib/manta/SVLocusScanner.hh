@@ -20,6 +20,7 @@
 #pragma once
 
 #include "blt_util/bam_record.hh"
+#include "blt_util/bam_record_util.hh"
 #include "manta/ReadGroupStatsSet.hh"
 #include "manta/SVCandidate.hh"
 #include "svgraph/SVLocus.hh"
@@ -48,7 +49,6 @@ struct SVObservationWeights
 };
 
 
-
 /// check bam record for soft-clipping which is interesting enough to be used as SV evidence:
 ///
 /// \param[in] minQ
@@ -64,15 +64,12 @@ getSVBreakendCandidateClip(
     const float minQFrac = 0.75);
 
 
-/// check bam record for semi-alignedness (number of mismatches/clipped bases weighted by their q-scores)
 bool
-isSemiAligned(const bam_record& bamRead, const double minSemiAlignedScore);
-
-bool
-isGoodShadow(const bam_record& bamRead,
-             const uint8_t lastMapq,
-             const std::string& lastQname,
-             const double minSingletonMapq);
+isGoodShadow(
+    const bam_record& bamRead,
+    const uint8_t lastMapq,
+    const std::string& lastQname,
+    const double minSingletonMapq);
 
 
 struct ReadScannerDerivOptions
@@ -149,7 +146,8 @@ struct SVLocusScanner
     /// interfere with larger event discovery if not kept under control
     bool
     isLocalAssemblyEvidence(
-        const bam_record& bamRead) const;
+        const bam_record& bamRead,
+        const reference_contig_segment& refSeq) const;
 
     /// return zero to many SVLocus objects if the read supports any
     /// structural variant(s) (detectable by manta)
@@ -162,6 +160,7 @@ struct SVLocusScanner
         const bam_record& bamRead,
         const unsigned defaultReadGroupIndex,
         const std::map<std::string, int32_t>& chromToIndex,
+        const reference_contig_segment& refSeq,
         std::vector<SVLocus>& loci) const;
 
     /// get local and remote breakends for each SV Candidate which can be extracted from a read pair
@@ -177,6 +176,8 @@ struct SVLocusScanner
         const bam_record* remoteReadPtr,
         const unsigned defaultReadGroupIndex,
         const std::map<std::string, int32_t>& chromToIndex,
+        const reference_contig_segment& localRefSeq,
+        const reference_contig_segment* remoteRefSeqPtr,
         std::vector<SVObservation>& candidates) const;
 
     /// provide direct access to the frag distro for
@@ -233,5 +234,7 @@ private:
 
     std::vector<CachedReadGroupStats> _stats;
 
+//    std::string lastQname;
+//    uint8_t lastMapq;
 };
 
