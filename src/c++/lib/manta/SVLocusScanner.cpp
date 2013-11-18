@@ -795,6 +795,10 @@ getReadBreakendsImpl(
     /// TODO: can't handle these yet, but plan to soon:
     //if (localRead.is_mate_unmapped()) return;
 
+    if (NULL != remoteReadPtr) {
+    	if (localRead.map_qual() < opt.minMapq && remoteReadPtr->map_qual() < opt.minMapq) return;
+    }
+
     /// get some basic derived information from the bam_record:
     const SimpleAlignment localAlign(localRead);
 
