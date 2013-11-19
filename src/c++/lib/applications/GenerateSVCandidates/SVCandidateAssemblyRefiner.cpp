@@ -687,7 +687,7 @@ getJumpAssembly(
 
     // ok, passed QC -- mark the high-scoring alignment as usable for hypothesis refinement:
     {
-        assemblyData.bestAlignmentIndex = highScoreIndex;
+        assemblyData.passedContigIndices.push_back(highScoreIndex);
 #ifdef DEBUG_REFINER
         log_os << logtag << "highscoreid: " << highScoreIndex << " alignment: " << assemblyData.spanningAlignments[highScoreIndex];
 #endif
@@ -695,8 +695,8 @@ getJumpAssembly(
         // process the alignment into information that's easily usable in the vcf output
         // (ie. breakends in reference coordinates)
 
-        const AssembledContig& bestContig(assemblyData.contigs[assemblyData.bestAlignmentIndex]);
-        const SVCandidateAssemblyData::JumpAlignmentResultType& bestAlign(assemblyData.spanningAlignments[assemblyData.bestAlignmentIndex]);
+        const AssembledContig& bestContig(assemblyData.contigs[highScoreIndex]);
+        const SVCandidateAssemblyData::JumpAlignmentResultType& bestAlign(assemblyData.spanningAlignments[highScoreIndex]);
 
         // first get each alignment associated with the correct breakend:
         const Alignment* bp1AlignPtr(&bestAlign.align1);
@@ -707,7 +707,7 @@ getJumpAssembly(
         // summarize usable output information in a second SVBreakend object -- this is the 'refined' sv:
         assemblyData.svs.push_back(sv);
         SVCandidate& newSV(assemblyData.svs.back());
-        newSV.assemblyAlignIndex = assemblyData.bestAlignmentIndex;
+        newSV.assemblyAlignIndex = highScoreIndex;
         newSV.assemblySegmentIndex = 0;
 
         newSV.setPrecise();
@@ -791,8 +791,7 @@ getSmallSVAssembly(
     assemblyData.smallSVAlignments.resize(contigCount);
     assemblyData.smallSVSegments.resize(contigCount);
 
-    bool isHighScore(false);
-    unsigned highScoreIndex(0);
+    std::vector<unsigned> passedContigs;
 
     for (unsigned contigIndex(0); contigIndex<contigCount; ++contigIndex)
     {
@@ -825,20 +824,13 @@ getSmallSVAssembly(
 
         if (isFilterSmallSV) continue;
 
-        // keep the highest scoring QC'd candidate:
-        // TODO: we should keep all QC'd candidates for the small event case
-        // FIXME : prevents us from finding overlapping events, keep vector of high-scoring contigs?
-        if ((! isHighScore) || (alignment.score > assemblyData.smallSVAlignments[highScoreIndex].score))
-        {
 #ifdef DEBUG_REFINER
-            log_os << logtag << "contigIndex: " << contigIndex << " is high score\n";
+        log_os << logtag << "contigIndex: " << contigIndex << " is added to passedContigs\n";
 #endif
-            isHighScore = true;
-            highScoreIndex=contigIndex;
-        }
+        passedContigs.push_back(contigIndex);
     }
 
-    if (! isHighScore) return;
+    if (passedContigs.empty()) return;
 
     // set any additional QC steps before deciding an alignment is usable:
     // TODO:
@@ -846,31 +838,35 @@ getSmallSVAssembly(
 
     // ok, passed QC -- mark the high-scoring alignment as usable for hypothesis refinement:
     {
-        assemblyData.bestAlignmentIndex = highScoreIndex;
-#ifdef DEBUG_REFINER
-        log_os << logtag << "highscoreid: " << highScoreIndex << " alignment: " << assemblyData.smallSVAlignments[highScoreIndex];
-#endif
+        assemblyData.passedContigIndices = passedContigs;
 
-        // process the alignment into information that's easily usable in the vcf output
-        // (ie. breakends in reference coordinates)
-
-        const AssembledContig& bestContig(assemblyData.contigs[assemblyData.bestAlignmentIndex]);
-        const SVCandidateAssemblyData::SmallAlignmentResultType& bestAlign(assemblyData.smallSVAlignments[assemblyData.bestAlignmentIndex]);
-
-        const SVCandidateAssemblyData::CandidateSegmentSetType& candidateSegments(assemblyData.smallSVSegments[assemblyData.bestAlignmentIndex]);
-        unsigned segmentIndex = 0;
-        BOOST_FOREACH(const SVCandidateAssemblyData::CandidateSegmentType& segRange, candidateSegments)
+        BOOST_FOREACH(const unsigned passedContigIndex, assemblyData.passedContigIndices)
         {
-            assemblyData.svs.push_back(sv);
-            SVCandidate& newSV(assemblyData.svs.back());
-            newSV.assemblyAlignIndex = assemblyData.bestAlignmentIndex;
-            newSV.assemblySegmentIndex = segmentIndex;
-            setSmallCandSV(assemblyData.bp1ref, bestContig.seq, bestAlign.align, segRange, newSV);
-            segmentIndex++;
-
 #ifdef DEBUG_REFINER
-            log_os << logtag << "small refined sv: " << newSV;
+            log_os << logtag << "passedContigIndex: " << passedContigIndex << " alignment: " << assemblyData.smallSVAlignments[passedContigIndex];
 #endif
+
+            // process the alignment into information that's easily usable in the vcf output
+            // (ie. breakends in reference coordinates)
+
+            const AssembledContig& bestContig(assemblyData.contigs[passedContigIndex]);
+            const SVCandidateAssemblyData::SmallAlignmentResultType& bestAlign(assemblyData.smallSVAlignments[passedContigIndex]);
+
+            const SVCandidateAssemblyData::CandidateSegmentSetType& candidateSegments(assemblyData.smallSVSegments[passedContigIndex]);
+            unsigned segmentIndex = 0;
+            BOOST_FOREACH(const SVCandidateAssemblyData::CandidateSegmentType& segRange, candidateSegments)
+            {
+                assemblyData.svs.push_back(sv);
+                SVCandidate& newSV(assemblyData.svs.back());
+                newSV.assemblyAlignIndex = passedContigIndex;
+                newSV.assemblySegmentIndex = segmentIndex;
+                setSmallCandSV(assemblyData.bp1ref, bestContig.seq, bestAlign.align, segRange, newSV);
+                segmentIndex++;
+
+    #ifdef DEBUG_REFINER
+                log_os << logtag << "small refined sv: " << newSV;
+    #endif
+            }
         }
     }
 }

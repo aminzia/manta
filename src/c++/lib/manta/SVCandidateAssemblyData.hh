@@ -70,8 +70,7 @@ struct SVCandidateAssemblyData
 {
     SVCandidateAssemblyData() :
         isCandidateSpanning(false),
-        isSpanning(false),
-        bestAlignmentIndex(0)
+        isSpanning(false)
     {}
 
     void
@@ -84,7 +83,7 @@ struct SVCandidateAssemblyData
         smallSVAlignments.clear();
         spanningAlignments.clear();
         smallSVSegments.clear();
-        bestAlignmentIndex=0;
+        passedContigIndices.clear();
         bp1ref.clear();
         bp2ref.clear();
         svs.clear();
@@ -111,7 +110,7 @@ struct SVCandidateAssemblyData
     std::vector<JumpAlignmentResultType> spanningAlignments; ///< contig spanning alignments, one per contig, may be empty
     std::vector<CandidateSegmentSetType> smallSVSegments; ///< list of indel sets, one per small alignment
 
-    unsigned bestAlignmentIndex; ///< if non-empty sv candidate set, which contig/alignment produced them?
+    std::vector<unsigned> passedContigIndices; ///< if non-empty sv candidate set, which contig/alignment produced them?
 
     // expanded reference regions around the candidate SV breakend regions, for small events we use only bp1ref:
     reference_contig_segment bp1ref;
