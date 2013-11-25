@@ -57,7 +57,7 @@ getSimpleSVAltPairSupport(
     assert(sv.bp1.interval.tid == sv.bp2.interval.tid);
     assert(getSVType(sv) == SV_TYPE::INDEL);
 
-    /// In case of breakend micorhomology approximate the breakend as a point event at the center of the possible range:
+    /// In case of breakend microhomology approximate the breakend as a point event at the center of the possible range:
     const pos_t centerPos1(sv.bp1.interval.range.center_pos());
     const pos_t centerPos2(sv.bp2.interval.range.center_pos());
     assert(centerPos2>centerPos1);
@@ -69,7 +69,8 @@ getSimpleSVAltPairSupport(
     // total impact of the alt allele on template size:
     const pos_t altShift((centerPos2-centerPos1)-insertSize);
 
-    const unsigned minMapQ(_readScanner.getMinMapQ());
+    //const unsigned minMapQ(_readScanner.getMinMapQ());
+    const unsigned minMapQ(0);
 
     const unsigned bamCount(_bamStreams.size());
     for (unsigned bamIndex(0); bamIndex < bamCount; ++bamIndex)
@@ -172,7 +173,7 @@ getSimpleSVAltPairSupport(
             }
 
             if (! isFirstBamRead) continue;
-            if (! evRead.isAnchored) continue;
+            //if (! evRead.isAnchored) continue;
 
             /// old tracker:
             if (isBp1)
@@ -210,7 +211,8 @@ getSVRefPairSupport(
     const pos_t centerPos(bp.interval.range.center_pos());
 
 
-    const unsigned minMapQ(_readScanner.getMinMapQ());
+    //const unsigned minMapQ(_readScanner.getMinMapQ());
+    const unsigned minMapQ(0);
 
     const unsigned bamCount(_bamStreams.size());
     for (unsigned bamIndex(0); bamIndex < bamCount; ++bamIndex)
@@ -321,7 +323,7 @@ getSVRefPairSupport(
             }
 
             if (isDoubleCountSkip) continue;
-            if (! evRead.isAnchored) continue;
+            //if (! evRead.isAnchored) continue;
 
             /// old tracker:
             if (isBp1)
@@ -678,7 +680,9 @@ processExistingAltPairInfo(
     SVScoreInfo& baseInfo,
     SVEvidence& evidence)
 {
-    const unsigned minMapQ(_readScanner.getMinMapQ());
+    //const unsigned minMapQ(_readScanner.getMinMapQ());
+	const unsigned minMapQPair(_readScanner.getMinMapQ());
+	const unsigned minMapQ(0);
 
     const unsigned bamCount(_bamStreams.size());
     for (unsigned bamIndex(0); bamIndex < bamCount; ++bamIndex)
@@ -736,17 +740,23 @@ processExistingAltPairInfo(
             SVFragmentEvidence& fragment(evidence.getSample(isTumor)[qname]);
             SVFragmentEvidenceAllele& alt(fragment.alt);
 
+            bool read1MapqPassed(false);
             if (pair.read1.isSet())
             {
                 sample.alt.bp1SpanReadCount += 1;
                 setReadEvidence(minMapQ, pair.read1.bamrec, fragment.read1);
+                if (pair.read1.bamrec.map_qual()>minMapQPair) read1MapqPassed = true;
             }
 
+            bool read2MapqPassed(false);
             if (pair.read2.isSet())
             {
                 sample.alt.bp2SpanReadCount += 1;
                 setReadEvidence(minMapQ, pair.read2.bamrec, fragment.read2);
+                if (pair.read2.bamrec.map_qual()>minMapQPair) read2MapqPassed = true;
             }
+            if (!read1MapqPassed && !read2MapqPassed) continue;
+
 
             if (pair.read1.isSet() && pair.read2.isSet())
             {

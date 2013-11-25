@@ -239,7 +239,8 @@ addConservativeSpanningPairSupport(
     if (! fragev.isAnySpanningPairSupport()) return;
 
     /// high-quality spanning support relies on read1 and read2 mapping well:
-    if (! (fragev.read1.isObservedAnchor() && fragev.read2.isObservedAnchor())) return;
+    //if (! (fragev.read1.isObservedAnchor() && fragev.read2.isObservedAnchor())) return;
+    if (!fragev.read1.isObservedAnchor() && !fragev.read2.isObservedAnchor()) return;
 
     float altLhood(getSpanningPairAlleleLhood(fragev.alt));
     float refLhood(getSpanningPairAlleleLhood(fragev.ref));
