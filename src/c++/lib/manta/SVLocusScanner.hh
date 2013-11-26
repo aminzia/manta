@@ -76,7 +76,6 @@ getSVBreakendCandidateClip(
     const uint8_t minQ = 20,
     const float minQFrac = 0.75);
 
-
 bool
 isGoodShadow(
     const bam_record& bamRead,
@@ -262,7 +261,5 @@ private:
 
     std::vector<CachedReadGroupStats> _stats;
 
-//    std::string lastQname;
-//    uint8_t lastMapq;
 };
 

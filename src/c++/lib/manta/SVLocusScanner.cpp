@@ -64,6 +64,8 @@ classifySize(
     return NORMAL;
 }
 
+
+
 static
 bool
 isLarge(const index_t i)
@@ -77,6 +79,11 @@ isLarge(const index_t i)
         return true;
     }
 }
+} // end of namespace FragmentSizeType
+
+namespace ShadowReadCache {
+    static std::string lastQname = "NA";
+    static uint8_t lastMapq = 0;
 }
 
 
@@ -720,7 +727,7 @@ getSVCandidatesFromPair(
 }
 
 
-#if 0
+
 /// get SV candidates from shadow/singleton pairs
 /// look for singletons, create candidateSV around conf. interval of shadow position
 /// cache singletons? might be needed to remove poor quality shadows.
@@ -736,6 +743,7 @@ getSVCandidatesFromShadow(
     TrackedCandidates& candidates)
 {
     using namespace SVEvidenceType;
+    using namespace ShadowReadCache;
     static const index_t svSource(SHADOW);
 
     static const bool isComplex(true);
@@ -747,7 +755,7 @@ getSVCandidatesFromShadow(
         // need to take care of this case
         // need to rely on cached mapq and qname
         return;
-        if (!isGoodShadow(localRead,lastMapq,lastQname,opt.minSingletonMapqGraph))
+        if (!isGoodShadow(localRead,ShadowReadCache::lastMapq,ShadowReadCache::lastQname,opt.minSingletonMapqGraph))
         {
             return;
         }
@@ -790,7 +798,6 @@ getSVCandidatesFromShadow(
     const pos_t shadowGenomePos = singletonGenomePos + properPairRangeOffset;
     candidates.push_back(GetSplitSVCandidate(opt,targetId,shadowGenomePos,shadowGenomePos, svSource, isComplex));
 }
-#endif
 
 
 
@@ -882,7 +889,7 @@ getReadBreakendsImpl(
     }
 
     // process shadows:
-    //getSVCandidatesFromShadow(opt, rstats, localRead, localAlign,remoteReadPtr,candidates);
+    getSVCandidatesFromShadow(opt, rstats, localRead, localAlign,remoteReadPtr,candidates);
 
     // - process anomalous read pairs:
     getSVCandidatesFromPair(opt, rstats, localRead, localAlign, remoteReadPtr,
@@ -1248,8 +1255,10 @@ getSVLoci(
     const CachedReadGroupStats& rstats(_stats[defaultReadGroupIndex]);
     getSVLociImpl(_opt, _dopt, rstats, bamRead, chromToIndex, refSeq, loci,
                   truthTracker);
-    //lastQname = bamRead.qname();
-    //lastMapq  = bamRead.map_qual();
+
+    using namespace ShadowReadCache;
+    ShadowReadCache::lastQname = bamRead.qname();
+    ShadowReadCache::lastMapq  = bamRead.map_qual();
 }
 
 
