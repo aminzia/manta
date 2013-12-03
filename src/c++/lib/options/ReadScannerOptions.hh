@@ -36,8 +36,7 @@ struct ReadScannerOptions
         // and might need some fine-tuning
         minSemiAlignedScoreGraph(180.0),
         minSemiAlignedScoreCandidates(180.0),
-        minSingletonMapqGraph(30),
-        minSingletonMapqCandidates(20),
+        minSingletonMapq(20),
         isIgnoreAnomProperPair(false)
     {}
 
@@ -81,9 +80,8 @@ struct ReadScannerOptions
     double minSemiAlignedScoreGraph;
     double minSemiAlignedScoreCandidates;
 
-    // We want only shadows with a good singleton mapq, but use again different thresholds for graph and candidate generation
-    unsigned minSingletonMapqGraph;
-    unsigned minSingletonMapqCandidates;
+    // We want only shadows with a good singleton mapq
+    unsigned minSingletonMapq;
 
     bool isIgnoreAnomProperPair; ///< typically set true for RNA-Seq analysis, where proper-pair is used to signal intron-spanning pairs
 };

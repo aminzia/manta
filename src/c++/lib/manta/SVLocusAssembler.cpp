@@ -222,7 +222,7 @@ getBreakendReads(
                 if (isGoodShadow(bamRead,
                                  lastMapq,
                                  lastQname,
-                                 _scanOpt.minSingletonMapqCandidates))
+                                 _scanOpt.minSingletonMapq))
                 {
                     isShadowKeeper = true;
                     ++shadowCnt;

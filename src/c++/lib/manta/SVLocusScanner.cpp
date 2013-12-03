@@ -755,7 +755,7 @@ getSVCandidatesFromShadow(
         // need to take care of this case
         // need to rely on cached mapq and qname
         return;
-        if (!isGoodShadow(localRead,ShadowReadCache::lastMapq,ShadowReadCache::lastQname,opt.minSingletonMapqGraph))
+        if (!isGoodShadow(localRead,ShadowReadCache::lastMapq,ShadowReadCache::lastQname,opt.minSingletonMapq))
         {
             return;
         }
@@ -771,7 +771,7 @@ getSVCandidatesFromShadow(
         if (localRead.is_mate_unmapped())
         {
             // remote read is shadow candidate
-            if (!isGoodShadow(remoteRead,localRead.map_qual(),localRead.qname(),opt.minSingletonMapqGraph))
+            if (!isGoodShadow(remoteRead,localRead.map_qual(),localRead.qname(),opt.minSingletonMapq))
             {
                 return;
             }
@@ -781,7 +781,7 @@ getSVCandidatesFromShadow(
         else if (localRead.is_unmapped())
         {
             // local is shadow candidate
-            if (!isGoodShadow(localRead,remoteRead.map_qual(),remoteRead.qname(),opt.minSingletonMapqGraph))
+            if (!isGoodShadow(localRead,remoteRead.map_qual(),remoteRead.qname(),opt.minSingletonMapq))
             {
                 return;
             }
