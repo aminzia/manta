@@ -271,6 +271,20 @@ isFilterCandidate(
 
 
 static
+bool
+is_range_within(
+    const known_pos_range2& r1,
+    const known_pos_range2& r2,
+    const pos_t dist)
+{
+    return (((r1.end_pos()+dist) > r2.begin_pos()) &&
+            ((r2.end_pos()+dist) > r1.begin_pos()));
+
+}
+
+
+
+static
 void
 runGSC(
     const GSCOptions& opt,
@@ -326,19 +340,67 @@ runGSC(
             svFind.findCandidateSV(chromToIndex, edge, svData, svs,
                                    truthTracker);
 
-            truthTracker.reportNumCands(svs.size(), edge);
+            // fuse self-assembly candidates that are too close together:
+            //
+            const unsigned candidateCount(svs.size());
+            std::vector<bool> isCandidateFiltered(candidateCount,false);
+            for (unsigned candidateIndex(0); candidateIndex<candidateCount; ++candidateIndex)
+            {
+                const SVCandidate& candidateSV(svs[candidateIndex]);
+                if (isFilterCandidate(candidateSV)) isCandidateFiltered[candidateIndex] = true;
+            }
+
+            for (unsigned candidateIndex(0); candidateIndex<candidateCount; ++candidateIndex)
+            {
+                if (isCandidateFiltered[candidateIndex]) continue;
+                SVCandidate& candidateSV(svs[candidateIndex]);
+
+                if (! isComplexSV(candidateSV)) continue;
+
+                while (true)
+                {
+                    bool isComplete(true);
+                    for (unsigned candidateIndex2(candidateIndex+1); candidateIndex2<candidateCount; ++candidateIndex2)
+                    {
+                        if (isCandidateFiltered[candidateIndex2]) continue;
+                        const SVCandidate& candidateSV2(svs[candidateIndex2]);
+
+                        if (! isComplexSV(candidateSV2)) continue;
+
+                        if (candidateSV.bp1.interval.tid != candidateSV2.bp1.interval.tid) continue;
+
+                        if (is_range_within(candidateSV.bp1.interval.range, candidateSV2.bp1.interval.range, 800))
+                        {
+                            candidateSV.bp1.interval.range.merge_range(candidateSV2.bp1.interval.range);
+                            isCandidateFiltered[candidateIndex2] = true;
+                            isComplete=false;
+                            break;
+                        }
+                    }
+
+                    if (isComplete) break;
+                }
+            }
+
+            truthTracker.reportNumCands(candidateCount, edge);
 
             if (opt.isVerbose)
             {
-                log_os << logtag << " Low-resolution candidate generation complete. Candidate count: " << svs.size() << "\n";
+                log_os << logtag << " Low-resolution candidate generation complete. Candidate count: " << candidateCount << "\n";
             }
 
-            BOOST_FOREACH(const SVCandidate& candidateSV, svs)
+            for (unsigned candidateIndex(0); candidateIndex<candidateCount; ++candidateIndex)
             {
                 truthTracker.addCandSV();
 
                 /// Filter various candidates types:
-                if (isFilterCandidate(candidateSV)) continue;
+                if (isCandidateFiltered[candidateIndex]) continue;
+
+                const SVCandidate& candidateSV(svs[candidateIndex]);
+
+                const bool isComplex(isComplexSV(candidateSV));
+
+                edgeTrack.addCand(isComplex);
 
                 if (opt.isVerbose)
                 {
@@ -369,6 +431,8 @@ runGSC(
                 }
                 else
                 {
+                    edgeTrack.addAssm(isComplex);
+
                     truthTracker.reportNumAssembled(assemblyData.svs.size());
 
                     BOOST_FOREACH(const SVCandidate& assembledSV, assemblyData.svs)
