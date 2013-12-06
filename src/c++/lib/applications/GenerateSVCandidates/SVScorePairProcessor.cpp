@@ -26,13 +26,20 @@ SVScorePairInitParams(
     const bool isBp1)
 {
     /// In case of breakend microhomology approximate the breakend as a point event at the center of the possible range:
-    centerPos1 = (sv.bp1.interval.range.center_pos());
-    centerPos2 = (sv.bp2.interval.range.center_pos());
+    const pos_t centerPos1 = (sv.bp1.interval.range.center_pos());
+    const pos_t centerPos2 = (sv.bp2.interval.range.center_pos());
 
     centerPos = ( isBp1 ? centerPos1 : centerPos2 );
 
+    beginCenterPos = centerPos1;
+    endCenterPos = centerPos2;
+    if (endCenterPos < beginCenterPos)
+    {
+        std::swap(beginCenterPos, endCenterPos);
+    }
+
     // total impact of the alt allele on template size, assuming a simple indel:
-    altShift = ((centerPos2-centerPos1)-sv.insertSeq.size());
+    altShift = (std::abs(centerPos2-centerPos1)-sv.insertSeq.size());
 
     minMapQ = (readScanner.getMinMapQ());
 }

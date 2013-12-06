@@ -47,16 +47,6 @@ checkInput(
     // this class is designed for simple alts only:
     assert(sv.bp1.interval.tid == sv.bp2.interval.tid);
     assert(getSVType(sv) == SV_TYPE::INDEL);
-
-    /// In case of breakend microhomology approximate the breakend as a point event at the center of the possible range:
-    const pos_t centerPos1 = (sv.bp1.interval.range.center_pos());
-    const pos_t centerPos2 = (sv.bp2.interval.range.center_pos());
-    if (centerPos2 <= centerPos1)
-    {
-        std::ostringstream oss;
-        oss << "ERROR: Unexpected breakend orientation in pair support routine for sv: " << sv << "\n";
-        BOOST_THROW_EXCEPTION(LogicException(oss.str()));
-    }
 }
 
 
@@ -103,7 +93,7 @@ processClearedRecord(
     }
 
     {
-        const pos_t fragOverlap(std::min((1+iparams.centerPos1-fragBeginRefPos), (fragEndRefPos-iparams.centerPos2)));
+        const pos_t fragOverlap(std::min((1+iparams.beginCenterPos-fragBeginRefPos), (fragEndRefPos-iparams.endCenterPos)));
 #ifdef DEBUG_MEGAPAIR
         log_os << __FUNCTION__ << ": frag begin/end/overlap: " << fragBeginRefPos << " " << fragEndRefPos << " " << fragOverlap << "\n";
 #endif
