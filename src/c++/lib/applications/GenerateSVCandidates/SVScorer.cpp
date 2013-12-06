@@ -53,16 +53,28 @@ SVScorer(
     _somaticOpt(opt.somaticOpt),
     _dFilterDiploid(opt.chromDepthFilename, _diploidOpt.maxDepthFactor, header),
     _dFilterSomatic(opt.chromDepthFilename, _somaticOpt.maxDepthFactor, header),
-    _readScanner(opt.scanOpt,opt.statsFilename,opt.alignFileOpt.alignmentFilename)
+    _readScanner(opt.scanOpt,opt.statsFilename,opt.alignFileOpt.alignmentFilename),
+    _maxPairDistortionSize(0)
 {
     // setup regionless bam_streams:
     // setup all data for main analysis loop:
+    unsigned bamIndex(0);
     BOOST_FOREACH(const std::string& afile, opt.alignFileOpt.alignmentFilename)
     {
         // avoid creating shared_ptr temporaries:
         streamPtr tmp(new bam_streamer(afile.c_str()));
         _bamStreams.push_back(tmp);
+
+        const int minSize(_readScanner.getMinAnomFragmentSize(bamIndex));
+        if (minSize > _maxPairDistortionSize)
+        {
+            _maxPairDistortionSize = minSize;
+        }
+        bamIndex++;
     }
+
+    static const int distortionBufferSize(400);
+    _maxPairDistortionSize += distortionBufferSize;
 }
 
 

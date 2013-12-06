@@ -163,4 +163,6 @@ private:
     SVLocusScanner _readScanner;
 
     std::vector<streamPtr> _bamStreams;
+
+    int _maxPairDistortionSize; ///< below this size, the pair support estimation for deletions might be incomplete due to anomolous pair boundary handling
 };

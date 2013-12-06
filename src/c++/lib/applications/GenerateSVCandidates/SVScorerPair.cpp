@@ -554,7 +554,21 @@ getSVPairSupport(
 
     std::vector<pairProcPtr> pairProcList;
 
+    /// a smaller deletion might have incomplete pre-computed pair evidence because
+    /// it is so close to the anom/non-anom pair-size boundary, in this case, it is
+    /// more accurate to recompute the pair support without size limits, as is done
+    /// for small-assembler candidates:
+    bool isPairIncomplete(false);
     if (assemblyData.isCandidateSpanning)
+    {
+        if (getSVType(sv) == SV_TYPE::INDEL)
+        {
+            int size(std::abs(sv.bp1.interval.range.center_pos() - sv.bp2.interval.range.center_pos()));
+            isPairIncomplete = (size < _maxPairDistortionSize);
+        }
+    }
+
+    if (assemblyData.isCandidateSpanning && (! isPairIncomplete))
     {
         // count the read pairs supporting the alternate allele in each sample
         // using data we already produced during candidate generation:

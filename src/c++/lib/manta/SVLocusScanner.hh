@@ -134,7 +134,7 @@ struct SVLocusScanner
         const bam_record& bamRead,
         const unsigned defaultReadGroupIndex) const;
 
-    /// fragments sizes get thrown is serveral pre-defined categories:
+    /// fragments sizes are classified into pre-defined categories:
     FragmentSizeType::index_t
     getFragmentSizeType(
         const bam_record& bamRead,
@@ -170,6 +170,14 @@ struct SVLocusScanner
     isLocalAssemblyEvidence(
         const bam_record& bamRead,
         const reference_contig_segment& refSeq) const;
+
+    /// get the smallest fragment size for an otherwise concordant read pair which is still considered anomolous:
+    int
+    getMinAnomFragmentSize(
+        const unsigned defaultReadGroupIndex) const
+    {
+        return _stats[defaultReadGroupIndex].minVeryCloseFragmentSize;
+    }
 
     /// return zero to many SVLocus objects if the read supports any
     /// structural variant(s) (detectable by manta)
@@ -226,7 +234,8 @@ struct SVLocusScanner
     };
 
     const Range&
-    getEvidencePairRange(const unsigned readGroupIndex) const
+    getEvidencePairRange(
+        const unsigned readGroupIndex) const
     {
         return _stats[readGroupIndex].evidencePair;
     }

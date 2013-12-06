@@ -118,9 +118,9 @@ public:
     // (this is provided for any small SV which is more complicated than a simple insert or deletion)
     ALIGNPATH::path_t insertAlignment;
 
-    unsigned candidateIndex; // low-res candidate index number, used to generate unique SV id
-    unsigned assemblyAlignIndex; // high-res assembly index number of alignment, used to generate unique SV id
-    unsigned assemblySegmentIndex; // high-res assembly index number of alignment segment, used to generate unique SV id
+    unsigned candidateIndex; ///< low-res candidate index number, used to generate unique SV id
+    unsigned assemblyAlignIndex; ///< high-res assembly index number of alignment, used to generate unique SV id
+    unsigned assemblySegmentIndex; ///< high-res assembly index number of alignment segment, used to generate unique SV id
 };
 
 std::ostream&

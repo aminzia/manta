@@ -1,3 +1,5 @@
+- MANTA-101 pair counts for deletions are inaccurate near the anomolous
+pair distance cutoff
 - MANTA-108 combine clip/semi-aligned evidence detection, don't detect
 overlapping reads as assembly evidence
 - MANTA-98 make fewer bam scans during scoring
