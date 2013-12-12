@@ -20,7 +20,10 @@
 #include "GSCOptions.hh"
 #include "SplitReadAlignment.hh"
 #include "SVEvidence.hh"
+#include "SVScorerPairOptions.hh"
+#include "SVScorePairProcessor.hh"
 
+#include "assembly/AssembledContig.hh"
 #include "blt_util/bam_streamer.hh"
 #include "blt_util/bam_header_info.hh"
 #include "blt_util/qscore_snp.hh"
@@ -29,28 +32,12 @@
 #include "manta/SVCandidateSetData.hh"
 #include "manta/SVLocusScanner.hh"
 #include "manta/SVModelScoreInfo.hh"
-#include "assembly/AssembledContig.hh"
 #include "manta/SVCandidateAssemblyData.hh"
 
 #include "boost/shared_ptr.hpp"
 
 #include <vector>
 #include <string>
-
-
-/// shared options related to read pair support:
-struct PairOptions
-{
-    PairOptions() :
-        minFragSupport(50)
-    {}
-
-    /// we're interested in any fragments which cross center pos with at least N bases of support on each side
-    /// (note this definition is certain to overlap the split read definition whenever N is less than the read length
-    ///
-    /// for reads shorter than this length, the whole read is required...
-    const pos_t minFragSupport;
-};
 
 
 struct CallOptionsSharedDeriv
@@ -103,6 +90,9 @@ struct SVScorer
         const bool isSomatic,
         SVModelScoreInfo& modelScoreInfo);
 
+    typedef boost::shared_ptr<SVScorePairProcessor> pairProcPtr;
+    typedef boost::shared_ptr<bam_streamer> streamPtr;
+
 private:
 
     void
@@ -110,40 +100,22 @@ private:
         const PairOptions& pairOpt,
         const SVCandidateSetData& svData,
         const SVCandidate& sv,
-        SVScoreInfo& baseInfo,
-        SVEvidence& evidence);
-
-    void
-    getSimpleSVAltPairSupport(
-        const PairOptions& pairOpt,
-        const SVCandidate& svcand,
-        const bool isBp1,
-        SVScoreInfo& baseInfo,
         SVEvidence& evidence);
 
     void
     getSVAltPairSupport(
         const PairOptions& pairOpt,
         const SVCandidate& sv,
-        SVScoreInfo& baseInfo,
-        SVEvidence& evidence);
-
-    /// find spanning read support for the reference allele in a single breakend
-    void
-    getSVRefPairSupport(
-        const PairOptions& pairOpt,
-        const SVBreakend& bp,
-        const bool isBp1,
-        SVScoreInfo& ssInfo,
-        SVEvidence& evidence);
+        SVEvidence& evidence,
+        std::vector<pairProcPtr>& pairProcList);
 
     /// find spanning read support for the reference allele for sv candidate
     void
     getSVRefPairSupport(
         const PairOptions& pairOpt,
         const SVCandidate& sv,
-        SVScoreInfo& ssInfo,
-        SVEvidence& evidence);
+        SVEvidence& evidence,
+        std::vector<pairProcPtr>& pairProcList);
 
     /// find paired read support for ref and alt alleles
     void
@@ -151,7 +123,6 @@ private:
         const SVCandidateSetData& svData,
         const SVCandidateAssemblyData& assemblyData,
         const SVCandidate& sv,
-        SVScoreInfo& ssInfo,
         SVEvidence& evidence);
 
     /// find split read support for ref and alt alleles
@@ -162,11 +133,14 @@ private:
         SVScoreInfo& ssInfo,
         SVEvidence& evidence);
 
-    /// determine maximum depth in region around breakend
-    unsigned
-    getBreakendMaxMappedDepth(
-        const SVBreakend& bp);
-
+    /// determine maximum depth and MQ0 frac in region around breakend of normal sample
+    void
+    getBreakendMaxMappedDepthAndMQ0(
+        const bool isMaxDepth,
+        const double cutoffDepth,
+        const SVBreakend& bp,
+        unsigned& maxDepth,
+        float& MQ0Frac);
 
     /// shared information gathering steps of all scoring models
     void
@@ -188,6 +162,5 @@ private:
     const ChromDepthFilterUtil _dFilterSomatic;
     SVLocusScanner _readScanner;
 
-    typedef boost::shared_ptr<bam_streamer> streamPtr;
     std::vector<streamPtr> _bamStreams;
 };

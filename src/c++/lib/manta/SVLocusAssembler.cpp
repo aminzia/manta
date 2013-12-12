@@ -36,9 +36,13 @@ SVLocusAssembler(
     const ReadScannerOptions& scanOpt,
     const SmallAssemblerOptions& assembleOpt,
     const AlignmentFileOptions& alignFileOpt,
-    const std::string& statsFilename) :
+    const std::string& statsFilename,
+    const std::string& chromDepthFilename,
+    const bam_header_info& bamHeader) :
     _scanOpt(scanOpt),
     _assembleOpt(assembleOpt),
+    _isAlignmentTumor(alignFileOpt.isAlignmentTumor),
+    _dFilter(chromDepthFilename, scanOpt.maxDepthFactor, bamHeader),
     _readScanner(_scanOpt, statsFilename, alignFileOpt.alignmentFilename)
 {
     // setup regionless bam_streams:
@@ -48,6 +52,32 @@ SVLocusAssembler(
         // avoid creating shared_ptr temporaries:
         streamPtr tmp(new bam_streamer(afile.c_str()));
         _bamStreams.push_back(tmp);
+    }
+}
+
+
+
+/// approximate depth tracking -- don't bother reading the cigar string, just assume a perfect match of
+/// size read_size
+static
+void
+addReadToDepthEst(
+    const bam_record& bamRead,
+    const pos_t beginPos,
+    std::vector<unsigned>& depth)
+{
+    const pos_t endPos(beginPos+depth.size());
+    const pos_t refStart(bamRead.pos()-1);
+
+    const pos_t readSize(bamRead.read_size());
+    for (pos_t readIndex(std::max(0,(beginPos-refStart))); readIndex<readSize; ++readIndex)
+    {
+        const pos_t refPos(refStart+readIndex);
+        if (refPos>=endPos) return;
+        const pos_t depthIndex(refPos-beginPos);
+        assert(depthIndex>=0);
+
+        depth[depthIndex]++;
     }
 }
 
@@ -84,8 +114,8 @@ getBreakendReads(
     }
 
 #ifdef DEBUG_ASBL
-    static const std::string logtag("SVLocusAssembler::getBreakendReads");
-    log_os << logtag << " searchRange " << searchRange << "\n";
+    static const std::string logtag("SVLocusAssembler::getBreakendReads: ");
+    log_os << logtag << "searchRange " << searchRange << "\n";
 #endif
 
     // for assembler reads, look for indels at report size or somewhat smaller
@@ -104,15 +134,33 @@ getBreakendReads(
         isSearchForRightOpen = false;
     }
 
+    const bool isMaxDepth(_dFilter.isMaxDepthFilter());
+    float maxDepth(0);
+    if (isMaxDepth)
+    {
+        maxDepth = _dFilter.maxDepth(bp.interval.tid);
+    }
+    const pos_t searchBeginPos(searchRange.begin_pos());
+    const pos_t searchEndPos(searchRange.end_pos());
+    std::vector<unsigned> normalDepthBuffer(searchRange.size(),0);
+
+    bool isFirstTumor(false);
+
     const unsigned bamCount(_bamStreams.size());
     for (unsigned bamIndex(0); bamIndex < bamCount; ++bamIndex)
     {
+        const bool isTumor(_isAlignmentTumor[bamIndex]);
+
+        /// assert expected sample order of all normal, then all tumor:
+        if (isTumor) isFirstTumor=true;
+        assert((! isFirstTumor) || isTumor);
+
         const std::string bamIndexStr(boost::lexical_cast<std::string>(bamIndex));
 
         bam_streamer& bamStream(*_bamStreams[bamIndex]);
 
         // set bam stream to new search interval:
-        bamStream.set_new_region(bp.interval.tid, searchRange.begin_pos(), searchRange.end_pos());
+        bamStream.set_new_region(bp.interval.tid, searchBeginPos, searchEndPos);
 
         // Singleton/shadow pairs *should* appear consecutively in the BAM file
         // this keeps track of the mapq score of the singleton read such that
@@ -122,54 +170,56 @@ getBreakendReads(
         std::string lastQname;
 
         static const unsigned MAX_NUM_READS(1000);
-        unsigned int shadowCnt(0);
+
 #ifdef DEBUG_ASBL
-        unsigned int semiAlignedCnt(0);
+        unsigned indelCount(0);
+        unsigned semiAlignedCount(0);
+        unsigned shadowCount(0);
 #endif
 
-        while (bamStream.next() && (reads.size() < MAX_NUM_READS))
+        while (bamStream.next())
         {
+            if (reads.size() >= MAX_NUM_READS)
+            {
+#ifdef DEBUG_ASBL
+                log_os << logtag << "WARNING: assembly read buffer full, skipping further input\n";
+#endif
+                break;
+            }
+
             const bam_record& bamRead(*(bamStream.get_record_ptr()));
 
-#if 0
-            // some conservative filtration criteria (including MAPQ) -- note this
-            // means that if we want shadow reads this will have to be changed b/c
-            // unmapped reads are filtered out here:
-            if (_readScanner.isReadFiltered(bamRead)) continue;
-#endif
+            if (isMaxDepth)
+            {
+                if (! isTumor)
+                {
+                    // depth estimation relies on a simple filtration criteria to stay in sync with the chromosome mean
+                    // depth estimates:
+                    if (! bamRead.is_unmapped())
+                    {
+                        addReadToDepthEst(bamRead, searchBeginPos, normalDepthBuffer);
+                    }
+                }
+            }
 
-            // include MAPQ0 because the split reads tend to have reduced mapping scores:
-            if (bamRead.is_filter()) continue;
-            if (bamRead.is_dup()) continue;
-            if (bamRead.is_secondary()) continue;
-            if (bamRead.is_supplement()) continue;
+            // don't filter out MAPQ0 because the split reads tend to have reduced mapping scores:
+            if (SVLocusScanner::isReadFilteredCore(bamRead)) continue;
 
-            if ((bamRead.pos()-1) >= searchRange.end_pos()) break;
+            const pos_t refPos(bamRead.pos()-1);
+            if (refPos >= searchEndPos) break;
+
+            if (isMaxDepth)
+            {
+                assert(refPos<searchEndPos);
+                const pos_t depthOffset(refPos - searchBeginPos);
+                if ((depthOffset >= 0) && (normalDepthBuffer[depthOffset] > maxDepth)) continue;
+            }
 
             // filter reads with "N"
             if (bamRead.get_bam_read().get_string().find('N') != std::string::npos) continue;
 
             SimpleAlignment bamAlign(bamRead);
 
-            /// check whether we keep this read because of soft clipping:
-            bool isClipKeeper(false);
-            {
-                static const unsigned minSoftClipLen(4);
-
-                unsigned leadingClipLen(0);
-                unsigned trailingClipLen(0);
-                getSVBreakendCandidateClip(bamRead, bamAlign.path, leadingClipLen, trailingClipLen);
-
-                if (isSearchForRightOpen)
-                {
-                    if (trailingClipLen >= minSoftClipLen) isClipKeeper = true;
-                }
-
-                if (isSearchForLeftOpen)
-                {
-                    if (leadingClipLen >= minSoftClipLen) isClipKeeper = true;
-                }
-            }
 
             /// check for any indels in read:
             bool isIndelKeeper(false);
@@ -185,7 +235,7 @@ getBreakendReads(
                 }
             }
 
-
+            /// this test covered semi-aligned and soft-clip together
             bool isSemiAlignedKeeper(false);
             {
                 static const unsigned minMismatchLen(4);
@@ -203,9 +253,6 @@ getBreakendReads(
                 {
                     if (leadingMismatchLen >= minMismatchLen) isSemiAlignedKeeper = true;
                 }
-#ifdef DEBUG_ASBL
-                ++semiAlignedCnt;
-#endif
 
 #if 0
                 if (isSemiAligned(bamRead,ref,_scanOpt.minSemiAlignedScoreCandidates))
@@ -225,7 +272,6 @@ getBreakendReads(
                                  _scanOpt.minSingletonMapq))
                 {
                     isShadowKeeper = true;
-                    ++shadowCnt;
                 }
             }
 
@@ -234,20 +280,28 @@ getBreakendReads(
             lastQname = bamRead.qname();
             isLastSet = true;
 
-            if (! (isClipKeeper
-                   || isIndelKeeper
+            if (! (isIndelKeeper
                    || isSemiAlignedKeeper
                    || isShadowKeeper
                   )) continue;
+
+#ifdef DEBUG_ASBL
+            if (isIndelKeeper) ++indelCount;
+            if (isSemiAlignedKeeper) ++semiAlignedCount;
+            if (isShadowKeeper) ++shadowCount;
+#endif
             //if ( bamRead.pe_map_qual() == 0 ) continue;
             const char flag(bamRead.is_second() ? '2' : '1');
             const std::string readKey = std::string(bamRead.qname()) + "_" + flag + "_" + bamIndexStr;
 
 #ifdef DEBUG_ASBL
-            log_os << logtag << " Adding " << readKey << " " << apath << " " << bamRead.pe_map_qual() << " " << bamRead.pos() << "\n"
-                   << bamRead.get_bam_read().get_string() << "\n";
-            log_os << " cigar: " << apath << " isClipKeeper: " << isClipKeeper << " isIndelKeeper: " << isIndelKeeper;
-            log_os << " isSemiAlignedKeeper: " << isSemiAlignedKeeper << " isShadowKeeper: " << isShadowKeeper << "\n";
+            log_os << logtag << "Adding bamrec: " << bamRead << '\n'
+                   << "\tmapq: " << bamRead.pe_map_qual() << '\n'
+                   << "\tread: " << bamRead.get_bam_read() << '\n';
+            log_os << "isIndelKeeper: " << isIndelKeeper
+                   << " isSemiAlignedKeeper: " << isSemiAlignedKeeper
+                   << " isShadowKeeper: " << isShadowKeeper
+                   << '\n';
 #endif
 
             if (readIndex.count(readKey) == 0)
@@ -263,8 +317,13 @@ getBreakendReads(
 #endif
             }
         }
+
 #ifdef DEBUG_ASBL
-        log_os << "bam " << bamIndex << " semi-aligned " << semiAlignedCnt << " shadow " << shadowCnt << "\n";
+        log_os << logtag << "bam " << bamIndex
+               << " indel: " << indelCount
+               << " semi-aligned " << semiAlignedCount
+               << " shadow " << shadowCount
+               << '\n';
 #endif
     }
 }

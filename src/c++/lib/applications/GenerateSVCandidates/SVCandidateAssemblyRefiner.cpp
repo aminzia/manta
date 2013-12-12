@@ -78,23 +78,32 @@ adjustAssembledBreakend(
 }
 
 
+/// \param[in] maxQCRefSpan what is the longest flanking sequence length considered for the high quality qc requirement?
 static
 bool
 isFilterSpanningAlignment(
+    const unsigned maxQCRefSpan,
     const GlobalJumpAligner<int> aligner,
-    const ALIGNPATH::path_t& apath,
-    const bool isFirstRead)
+    const bool isLeadingPath,
+    const ALIGNPATH::path_t& input_apath)
 {
-    // require min length of each contig sub-alignment even after off-reference clipping:
-    static const unsigned minAlignReadLength(30);
+    static const unsigned minAlignReadLength(30); ///< require min length of each contig sub-alignment even after off-reference clipping:
+    static const float minScoreFrac(0.75); ///< require min fraction of optimal score in each contig sub-alignment
 
-    // require min fraction of optimal score in each contig sub-alignmnet:
-    static const float minScoreFrac(0.75);
+    ALIGNPATH::path_t apath(input_apath);
+
+    /// prepare apath by orienting it always going forward from the breakend and limiting the length to
+    /// the first maxQCRefSpan ref bases covered:
+    ///
+    if (isLeadingPath)
+    {
+        std::reverse(apath.begin(),apath.end());
+    }
+
+    apath_limit_ref_length(maxQCRefSpan,apath);
 
     const unsigned readSize(apath_read_length(apath));
-    const unsigned clipSize(isFirstRead ?
-                            apath_soft_clip_lead_size(apath) :
-                            apath_soft_clip_trail_size(apath));
+    const unsigned clipSize(apath_soft_clip_trail_size(apath));
 
     assert(clipSize <= readSize);
 
@@ -142,6 +151,8 @@ getLargeIndelSegments(
     bool isInSegment(false);
     bool isCandidate(false);
     unsigned segmentStart(0);
+
+    segments.clear();
 
     const unsigned as(apath.size());
     for (unsigned i(0); i<as; ++i)
@@ -210,29 +221,37 @@ addCigarToSpanningAlignment(
 
 
 
+/// \param[in] maxQCRefSpan what is the longest flanking sequence length considered for the high quality qc requirement?
 static
 bool
 isSmallSVSegmentFilter(
+    const unsigned maxQCRefSpan,
     const AlignerBase<int>& aligner,
-    const ALIGNPATH::path_t& apath,
-    const bool isLeadingPath)
+    const bool isLeadingPath,
+    ALIGNPATH::path_t& apath)
 {
-    static const unsigned minAlignRefSpan(30); ///< min reference lenght for alignment
+    static const unsigned minAlignRefSpan(30); ///< min reference length for alignment
     static const unsigned minAlignReadLength(30); ///< min length of alignment after off-reference clipping
     static const float minScoreFrac(0.75); ///< min fraction of optimal score in each contig sub-alignment:
 
+    /// prepare apath by orienting it always going forward from the breakend and limiting the length to
+    /// the first maxQCRefSpan ref bases covered:
+    ///
+    if (isLeadingPath)
+    {
+        std::reverse(apath.begin(),apath.end());
+    }
+
+    apath_limit_ref_length(maxQCRefSpan,apath);
 
     const unsigned refSize(apath_read_length(apath));
-
     if (refSize < minAlignRefSpan)
     {
         return true;
     }
 
     const unsigned pathSize(apath_read_length(apath));
-    const unsigned clipSize(isLeadingPath ?
-                            apath_soft_clip_lead_size(apath) :
-                            apath_soft_clip_trail_size(apath));
+    const unsigned clipSize(apath_soft_clip_trail_size(apath));
 
     assert(clipSize <= pathSize);
 
@@ -246,14 +265,10 @@ isSmallSVSegmentFilter(
         return true;
     }
 
-    int nonClipScore(aligner.getPathScore(apath, false));
+    const int nonClipScore(std::max(0,aligner.getPathScore(apath, false)));
     const int optimalScore(clippedPathSize * aligner.getScores().match);
 
-    assert(optimalScore>0);
-    if (nonClipScore < 0) nonClipScore = 0;
-
     const float scoreFrac(static_cast<float>(nonClipScore)/static_cast<float>(optimalScore));
-
     if (scoreFrac < minScoreFrac)
     {
 #ifdef DEBUG_REFINER
@@ -270,9 +285,14 @@ isSmallSVSegmentFilter(
 /// test whether this single-node assembly is (1) an interesting variant above the minimum size and
 /// (2) passes QC otherwise (appropriate flanking regions, etc)
 ///
+/// \param[in] maxQCRefSpan what is the longest flanking sequence length considered for the high quality qc requirement?
+///
+/// \return true if these segments should be filtered out
+///
 static
 bool
 isFilterSmallSVAlignment(
+    const unsigned maxQCRefSpan,
     const GlobalAligner<int> aligner,
     const ALIGNPATH::path_t& apath,
     const unsigned minCandidateIndelSize,
@@ -284,18 +304,49 @@ isFilterSmallSVAlignment(
     //
     getLargeIndelSegments(apath, minCandidateIndelSize, candidateSegments);
 
-    // escape if this is a reference or small indel alignment
+    // escape if there are no indels above the minimum size
     if (candidateSegments.empty()) return true;
 
-    // test quality of alignmnet segments surrounding the variant region:
-    const unsigned firstCandIndelSegment(candidateSegments.front().first);
-    const unsigned lastCandIndelSegment(candidateSegments.back().second);
+    /// loop through possible leading segments until a clean one is found:
+    ///
+    while (true)
+    {
+        // test quality of alignment segments surrounding the variant region:
+        const unsigned firstCandIndelSegment(candidateSegments.front().first);
+        path_t leadingPath(apath.begin(), apath.begin()+firstCandIndelSegment);
 
-    const path_t leadingPath(apath.begin(), apath.begin()+firstCandIndelSegment);
-    const path_t trailingPath(apath.begin()+lastCandIndelSegment+1, apath.end());
+        static const bool isLeadingPath(true);
+        if (! isSmallSVSegmentFilter(maxQCRefSpan, aligner, isLeadingPath, leadingPath))
+        {
+            break;
+        }
 
-    if (isSmallSVSegmentFilter(aligner, leadingPath, true)) return true;
-    if (isSmallSVSegmentFilter(aligner, trailingPath, false)) return true;
+        // escape if this was the last segment
+        if (1 == candidateSegments.size()) return true;
+
+        candidateSegments = std::vector<std::pair<unsigned,unsigned> >(candidateSegments.begin()+1,candidateSegments.end());
+    }
+
+    /// loop through possible trailing segments until a clean one is found:
+    ///
+    while (true)
+    {
+        // test quality of alignment segments surrounding the variant region:
+        const unsigned lastCandIndelSegment(candidateSegments.back().second);
+        path_t trailingPath(apath.begin()+lastCandIndelSegment+1, apath.end());
+
+        static const bool isLeadingPath(false);
+        if (! isSmallSVSegmentFilter(maxQCRefSpan, aligner, isLeadingPath, trailingPath))
+        {
+            break;
+        }
+
+        // escape if this was the last segment
+        if (1 == candidateSegments.size()) return true;
+
+
+        candidateSegments.pop_back();
+    }
 
     return false;
 }
@@ -417,8 +468,8 @@ SVCandidateAssemblyRefiner(
     const bam_header_info& header) :
     _opt(opt),
     _header(header),
-    _smallSVAssembler(opt.scanOpt, opt.refineOpt.smallSVAssembleOpt, opt.alignFileOpt, opt.statsFilename),
-    _spanningAssembler(opt.scanOpt, opt.refineOpt.spanningAssembleOpt, opt.alignFileOpt, opt.statsFilename),
+    _smallSVAssembler(opt.scanOpt, opt.refineOpt.smallSVAssembleOpt, opt.alignFileOpt, opt.statsFilename, opt.chromDepthFilename, header),
+    _spanningAssembler(opt.scanOpt, opt.refineOpt.spanningAssembleOpt, opt.alignFileOpt, opt.statsFilename, opt.chromDepthFilename, header),
     _smallSVAligner(opt.refineOpt.smallSVAlignScores),
     _spanningAligner(opt.refineOpt.spanningAlignScores, opt.refineOpt.jumpScore)
 {}
@@ -441,7 +492,7 @@ getCandidateAssemblyData(
 
     // separate the problem into different assembly categories:
     //
-    if (isSimpleBreakend(sv.bp1.state) && isSimpleBreakend(sv.bp1.state))
+    if (isSpanningSV(sv))
     {
         // record the spanning status of the original low-resolution candidate:
         assemblyData.isCandidateSpanning=true;
@@ -449,7 +500,7 @@ getCandidateAssemblyData(
         // this case assumes two suspected breakends with a direction to each, most common large scale SV case:
         getJumpAssembly(sv, assemblyData);
     }
-    else if ((sv.bp1.state == SVBreakendState::COMPLEX))
+    else if (isComplexSV(sv))
     {
         // record the spanning status of the original low-resolution candidate:
         assemblyData.isCandidateSpanning=false;
@@ -684,8 +735,15 @@ getJumpAssembly(
     {
         const SVCandidateAssemblyData::JumpAlignmentResultType& hsAlign(assemblyData.spanningAlignments[highScoreIndex]);
 
-        if (isFilterSpanningAlignment(_spanningAligner, hsAlign.align1.apath, true)) return;
-        if (isFilterSpanningAlignment(_spanningAligner, hsAlign.align2.apath, false)) return;
+        bool isFilter(true);
+        const unsigned maxQCRefSpan[] = {100,200};
+        for (unsigned refSpanIndex(0); refSpanIndex<2; ++refSpanIndex)
+        {
+            if (isFilterSpanningAlignment( maxQCRefSpan[refSpanIndex], _spanningAligner, true, hsAlign.align1.apath)) continue;
+            if (isFilterSpanningAlignment( maxQCRefSpan[refSpanIndex], _spanningAligner, false, hsAlign.align2.apath)) continue;
+            isFilter=false;
+        }
+        if (isFilter) return;
     }
 
     // TODO: min context, etc.
@@ -827,8 +885,28 @@ getSmallSVAssembly(
         assemblyData.extendedContigs.push_back(extendedContig);
 
         // remove candidate from consideration unless we find a sufficiently large indel with good flanking sequence:
+        bool isFilterSmallSV(true);
         std::vector<std::pair<unsigned,unsigned> >& candidateSegments(assemblyData.smallSVSegments[contigIndex]);
-        const bool isFilterSmallSV( isFilterSmallSVAlignment(_smallSVAligner, alignment.align.apath, _opt.scanOpt.minCandidateVariantSize, candidateSegments));
+        candidateSegments.clear();
+
+        const unsigned maxQCRefSpan[] = {100,200};
+        for (unsigned refSpanIndex(0); refSpanIndex<2; ++refSpanIndex)
+        {
+            std::vector<std::pair<unsigned,unsigned> > segments;
+            const bool isFilter( isFilterSmallSVAlignment(maxQCRefSpan[refSpanIndex],
+                                                          _smallSVAligner,
+                                                          alignment.align.apath,
+                                                          _opt.scanOpt.minCandidateVariantSize,
+                                                          segments) );
+            if (! isFilter)
+            {
+                if (segments.size() > candidateSegments.size())
+                {
+                    candidateSegments = segments;
+                }
+                isFilterSmallSV=false;
+            }
+        }
 
 #ifdef DEBUG_REFINER
         log_os << logtag << "contigIndex: " << contigIndex << " isFilter " << isFilterSmallSV << " alignment: " << alignment;

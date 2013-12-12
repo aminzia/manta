@@ -95,9 +95,6 @@ operator<<(std::ostream& os, const SVAlignmentInfo& ai);
 struct SVSampleAlleleInfo
 {
     SVSampleAlleleInfo() :
-        bp1SpanReadCount(0),
-        bp2SpanReadCount(0),
-        spanPairCount(0),
         confidentSpanningPairCount(0),
         confidentSemiMappedSpanningPairCount(0),
         splitReadCount(0),
@@ -109,9 +106,6 @@ struct SVSampleAlleleInfo
     void
     clear()
     {
-        bp1SpanReadCount = 0;
-        bp2SpanReadCount = 0;
-        spanPairCount = 0;
         confidentSpanningPairCount = 0;
         confidentSemiMappedSpanningPairCount = 0;
         splitReadCount = 0;
@@ -121,10 +115,6 @@ struct SVSampleAlleleInfo
     }
 
     // allele pair support
-    unsigned bp1SpanReadCount;
-    unsigned bp2SpanReadCount;
-    unsigned spanPairCount;
-
     unsigned confidentSpanningPairCount;  ///< pairs where both reads are mapped and we've successfully looked up a fragment prob of 0.01 or more
     unsigned confidentSemiMappedSpanningPairCount; ///< pairs where at least one read is mapped and we've successfully looked up a fragment prob of 0.01 or more
 
@@ -159,13 +149,14 @@ std::ostream&
 operator<<(std::ostream& os, const SVSampleInfo& si);
 
 
-
 /// consolidate model-agnostic scoring results applied to an SV candidate
 struct SVScoreInfo
 {
     SVScoreInfo() :
         bp1MaxDepth(0),
-        bp2MaxDepth(0)
+        bp2MaxDepth(0),
+        bp1MQ0Frac(0),
+        bp2MQ0Frac(0)
     {}
 
     void
@@ -174,8 +165,11 @@ struct SVScoreInfo
         normal.clear();
         tumor.clear();
 
-        bp1MaxDepth=0;
-        bp2MaxDepth=0;
+        bp1MaxDepth = 0;
+        bp2MaxDepth = 0;
+
+        bp1MQ0Frac = 0.;
+        bp2MQ0Frac = 0.;
     }
 
     SVSampleInfo normal;
@@ -183,6 +177,9 @@ struct SVScoreInfo
 
     unsigned bp1MaxDepth;
     unsigned bp2MaxDepth;
+
+    float bp1MQ0Frac;
+    float bp2MQ0Frac;
 };
 
 

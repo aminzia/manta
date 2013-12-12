@@ -27,7 +27,7 @@
 struct ESLOptions
 {
     ESLOptions(const unsigned minMergeEdgeObservations = 3) :
-        graphOpt(minMergeEdgeObservations * SVObservationWeights::observation)   // initialize noise edge filtration parameters
+        graphOpt(minMergeEdgeObservations * SVObservationWeights::observation)  // initialize noise edge filtration parameters
     {}
 
     AlignmentFileOptions alignFileOpt;
@@ -38,6 +38,7 @@ struct ESLOptions
     std::string outputFilename;
     std::string region;
     std::string statsFilename;
+    std::string chromDepthFilename;
     std::string truthVcfFilename;
 };
 

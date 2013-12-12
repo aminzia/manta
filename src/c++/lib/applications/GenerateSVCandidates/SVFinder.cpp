@@ -39,11 +39,14 @@
 SVFinder::
 SVFinder(const GSCOptions& opt) :
     _scanOpt(opt.scanOpt),
+    _isAlignmentTumor(opt.alignFileOpt.isAlignmentTumor),
     _readScanner(_scanOpt,opt.statsFilename,opt.alignFileOpt.alignmentFilename),
     _referenceFilename(opt.referenceFilename)
 {
     // load in set:
     _set.load(opt.graphFilename.c_str(),true);
+
+    _dFilterPtr.reset(new ChromDepthFilterUtil(opt.chromDepthFilename,_scanOpt.maxDepthFactor,_set.header));
 
     // setup regionless bam_streams:
     // setup all data for main analysis loop:
@@ -55,6 +58,12 @@ SVFinder(const GSCOptions& opt) :
     }
 }
 
+
+
+/// making the dtor explicit and in the cpp allows auto_ptr to work reliably:
+SVFinder::
+~SVFinder()
+{}
 
 
 // test if read supports an SV on this edge, if so, add to SVData
@@ -76,8 +85,6 @@ addSVNodeRead(
     using namespace illumina::common;
 
     if (scanner.isReadFiltered(bamRead)) return;
-
-    if (bamRead.is_supplement()) return;
 
     const bool isNonCompressedAnomalous(scanner.isNonCompressedAnomalous(bamRead,bamIndex));
 
@@ -175,6 +182,32 @@ getNodeRefSeq(
 
 
 
+/// approximate depth tracking -- don't bother reading the cigar string, just assume a perfect match of
+/// size read_size
+static
+void
+addReadToDepthEst(
+    const bam_record& bamRead,
+    const pos_t beginPos,
+    std::vector<unsigned>& depth)
+{
+    const pos_t endPos(beginPos+depth.size());
+    const pos_t refStart(bamRead.pos()-1);
+
+    const pos_t readSize(bamRead.read_size());
+    for (pos_t readIndex(std::max(0,(beginPos-refStart))); readIndex<readSize; ++readIndex)
+    {
+        const pos_t refPos(refStart+readIndex);
+        if (refPos>=endPos) return;
+        const pos_t depthIndex(refPos-beginPos);
+        assert(depthIndex>=0);
+
+        depth[depthIndex]++;
+    }
+}
+
+
+
 void
 SVFinder::
 addSVNodeData(
@@ -212,10 +245,28 @@ addSVNodeData(
            << "\n";
 #endif
 
+    const bool isMaxDepth(dFilter().isMaxDepthFilter());
+    float maxDepth(0);
+    if (isMaxDepth)
+    {
+        maxDepth = dFilter().maxDepth(searchInterval.tid);
+    }
+    const pos_t searchBeginPos(searchInterval.range.begin_pos());
+    const pos_t searchEndPos(searchInterval.range.end_pos());
+    std::vector<unsigned> normalDepthBuffer(searchInterval.range.size(),0);
+
+    bool isFirstTumor(false);
+
     // iterate through reads, test reads for association and add to svData:
     unsigned bamIndex(0);
     BOOST_FOREACH(streamPtr& bamPtr, _bamStreams)
     {
+        const bool isTumor(_isAlignmentTumor[bamIndex]);
+
+        /// assert expected sample order of all normal, then all tumor:
+        if (isTumor) isFirstTumor=true;
+        assert((! isFirstTumor) || isTumor);
+
         SVCandidateSetReadPairSampleGroup& svDataGroup(svData.getDataGroup(bamIndex));
         bam_streamer& read_stream(*bamPtr);
 
@@ -228,6 +279,26 @@ addSVNodeData(
         while (read_stream.next())
         {
             const bam_record& bamRead(*(read_stream.get_record_ptr()));
+
+            const pos_t refPos(bamRead.pos()-1);
+            if (refPos >= searchEndPos) break;
+
+            if (isMaxDepth)
+            {
+                if (! isTumor)
+                {
+                    // depth estimation relies on a simple filtration criteria to stay in sync with the chromosome mean
+                    // depth estimates:
+                    if (! bamRead.is_unmapped())
+                    {
+                        addReadToDepthEst(bamRead, searchBeginPos, normalDepthBuffer);
+                    }
+                }
+
+                assert(refPos<searchEndPos);
+                const pos_t depthOffset(refPos - searchBeginPos);
+                if ((depthOffset>=0) && (normalDepthBuffer[depthOffset] > maxDepth)) continue;
+            }
 
             // test if read supports an SV on this edge, if so, add to SVData
             addSVNodeRead(
@@ -500,22 +571,18 @@ assignPairObservationsToSVCandidates(
         {
             // remove candidates which don't match the current edge:
             //
-            if (isComplex(readCand))
+            if (isComplexSV(readCand))
             {
-                /// TODO: enable the rest of this filter once there's time to study its impact (MANTA-75)
-                ///
-#if 0
                 if (! readCand.bp1.interval.isIntersect(node1.getInterval())) continue;
                 if (! readCand.bp1.interval.isIntersect(node2.getInterval())) continue;
-#endif
             }
             else
             {
-                const bool isInter((readCand.bp1.interval.isIntersect(node1.getInterval())) &&
-                                   (readCand.bp2.interval.isIntersect(node2.getInterval())));
-                const bool isSwapInter((readCand.bp1.interval.isIntersect(node2.getInterval())) &&
-                                       (readCand.bp2.interval.isIntersect(node1.getInterval())));
-                if (! (isInter || isSwapInter)) continue;
+                const bool isIntersect((readCand.bp1.interval.isIntersect(node1.getInterval())) &&
+                                       (readCand.bp2.interval.isIntersect(node2.getInterval())));
+                const bool isSwapIntersect((readCand.bp1.interval.isIntersect(node2.getInterval())) &&
+                                           (readCand.bp2.interval.isIntersect(node1.getInterval())));
+                if (! (isIntersect || isSwapIntersect)) continue;
             }
         }
 

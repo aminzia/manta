@@ -30,29 +30,22 @@ struct ReadScannerOptions
         splitBreakendSizeFraction(0.1),
         maxSplitBreakendSize(100),
         minSplitBreakendSize(10),
-        minSoftClipLen(8),
         minSemiAlignedMismatchLen(8),
         // These numbers are based on checking a few dozens reads
         // and might need some fine-tuning
         minSemiAlignedScoreGraph(180.0),
         minSemiAlignedScoreCandidates(180.0),
         minSingletonMapq(20),
-        isIgnoreAnomProperPair(false)
+        isIgnoreAnomProperPair(false),
+        maxDepthFactor(12)
     {}
 
     unsigned minMapq;
 
-    /// report breakend regions with x prob regions removed from each edge
-    float breakendEdgeTrimProb;
-
-    /// report a pair as "proper pair" if fragment size is within x prob region removed from each edge
-    float properPairTrimProb;
-
-    /// add a pair to the evidence pool if frag size is within x prob region removed from each edge
-    float evidenceTrimProb;
-
-    /// ignore indels smaller than this when building graph:
-    unsigned minCandidateVariantSize;
+    float breakendEdgeTrimProb; ///< report breakend regions with x prob regions removed from each edge
+    float properPairTrimProb; ///< report a pair as "proper pair" if fragment size is within x prob region removed from each edge
+    float evidenceTrimProb; ///< add a pair to the evidence pool if frag size is within x prob region removed from each edge
+    unsigned minCandidateVariantSize; ///< ignore indels smaller than this when building graph:
 
     // whenever a breakend is predicted from a read pair junction, the predicted breakend range should be no
     // smaller than this:
@@ -70,10 +63,7 @@ struct ReadScannerOptions
     // smaller than this:
     unsigned minSplitBreakendSize;
 
-    // Soft clipped read ends must be of at least this length to be entered as small SV evidence
-    unsigned minSoftClipLen;
-
-    // Semi-aligned regions need to be at least this long to be included as SV evidence
+    // Semi-aligned regions (including soft-clipped) need to be at least this long to be included as SV evidence
     unsigned minSemiAlignedMismatchLen;
 
     // Accept semi-aligned reads with at least this hypothesis score, different for graph and candidate generation
@@ -84,4 +74,6 @@ struct ReadScannerOptions
     unsigned minSingletonMapq;
 
     bool isIgnoreAnomProperPair; ///< typically set true for RNA-Seq analysis, where proper-pair is used to signal intron-spanning pairs
+    float maxDepthFactor; ///< the maximum depth at which input reads are considered in graph creation/assembly, etc. (when avg chrom depths are provided)
 };
+
