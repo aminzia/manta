@@ -774,7 +774,7 @@ findCandidateSV(
         (locus.getEdge(edge.nodeIndex2,edge.nodeIndex1).getCount() < minEdgeCount))
     {
 #ifdef DEBUG_SVDATA
-        log_os << "SVDATA: Edge failed min edge count.\n";
+        log_os << "SVDATA: Edge failed min edge count of " << minEdgeCount << ".\n";
 #endif
         return;
     }
