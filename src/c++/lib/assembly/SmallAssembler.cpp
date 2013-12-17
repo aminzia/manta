@@ -25,6 +25,7 @@
 
 #include <vector>
 
+#include <fstream>
 
 // compile with this macro to get verbose output:
 //#define DEBUG_ASBL
@@ -95,6 +96,10 @@ walk(const SmallAssemblerOptions& opt,
 {
     // we start with the seed
     contig = seed;
+
+#ifdef DEBUG_ASBL
+    dumpHash(wordCount);
+#endif
 
     std::set<std::string> seenBefore;	// records k-mers already encountered during extension
     seenBefore.insert(contig);
@@ -178,7 +183,26 @@ walk(const SmallAssemblerOptions& opt,
     }
 }
 
+static
+void
+dumpHash(const str_uint_map_t& wordCount) {
 
+
+	std::ofstream outFile;
+	outFile.open("debruijn.graph.out");
+
+	outFile << "digraph debruijn_graph {\n";
+	outFile << "rankdir=LR;\n";
+	outFile << "size=\"8,5\"\n";
+	outFile << "node [shape = doublecircle];\n";
+
+	for (str_uint_map_t::const_iterator ct = wordCount.begin();ct!=wordCount.end();++ct) {
+		outFile << " " << ct->first;
+	}
+	outFile << "\n";
+	outFile << "}\n";
+	outFile.close();
+}
 
 static
 bool
