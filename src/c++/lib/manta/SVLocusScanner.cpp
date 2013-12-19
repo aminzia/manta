@@ -32,7 +32,6 @@
 
 
 //#define DEBUG_SCANNER
-
 //#define DEBUG_IS_SHADOW
 
 #ifdef DEBUG_SCANNER
@@ -411,6 +410,7 @@ isGoodShadow(const bam_record& bamRead,
 {
 #ifdef DEBUG_IS_SHADOW
     static const std::string logtag("isGoodShadow");
+    log_os << logtag << " " << (!bamRead.is_unmapped()) << " " << (bamRead.is_mate_unmapped()) << "\n";
 #endif
     // shadow read should be unmapped
     if (!bamRead.is_unmapped()) return false;
@@ -421,6 +421,9 @@ isGoodShadow(const bam_record& bamRead,
 
     if (get_avg_quality(bamRead) < minAvgQualShadow)
     {
+#ifdef DEBUG_IS_SHADOW
+        log_os << logtag << " Poor quality read, discarding. : avg qual=" << get_avg_quality(bamRead) << " minAvgQualShadow=" << minAvgQualShadow << std::endl;
+#endif
         return false;
     }
 
@@ -434,6 +437,8 @@ isGoodShadow(const bam_record& bamRead,
         return false;
     }
 
+    //return true;
+
     if ((unsigned int)lastMapq > minSingletonMapq)
     {
 #ifdef DEBUG_IS_SHADOW
@@ -444,6 +449,14 @@ isGoodShadow(const bam_record& bamRead,
                << " last qname = " << lastQname << std::endl;
 #endif
         return true;
+    } else {
+#ifdef DEBUG_IS_SHADOW
+        log_os << logtag << " No shadow!" << std::endl;
+        log_os << logtag << " this mapq  = " << ((unsigned int)bamRead.map_qual())
+               << " this qname = " << bamRead.qname() << std::endl;
+        log_os << logtag << " last mapq  = " << ((unsigned int)lastMapq)
+               << " last qname = " << lastQname << std::endl;
+#endif
     }
 
     return false;

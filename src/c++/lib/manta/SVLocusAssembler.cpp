@@ -188,6 +188,11 @@ getBreakendReads(
             }
 
             const bam_record& bamRead(*(bamStream.get_record_ptr()));
+#ifdef DEBUG_ASBL
+                log_os << logtag << "DENOVO: assembly test for " << bamRead.get_bam_read().get_string() << "\n";
+#endif
+
+
 
             if (isMaxDepth)
             {
@@ -220,6 +225,9 @@ getBreakendReads(
 
             SimpleAlignment bamAlign(bamRead);
 
+#ifdef DEBUG_ASBL
+                log_os << logtag << "DENOVO: got here \n";
+#endif
 
             /// check for any indels in read:
             bool isIndelKeeper(false);
@@ -266,12 +274,20 @@ getBreakendReads(
 
             if (isLastSet)
             {
+#ifdef DEBUG_ASBL
+                log_os << logtag << "DENOVO: isLastSet \n";
+#endif
                 if (isGoodShadow(bamRead,
                                  lastMapq,
                                  lastQname,
                                  _scanOpt.minSingletonMapq))
                 {
                     isShadowKeeper = true;
+                } else {
+#ifdef DEBUG_ASBL
+                log_os << logtag << "DENOVO: but not good shawdow\n";
+#endif
+
                 }
             }
 
@@ -279,6 +295,9 @@ getBreakendReads(
             lastMapq  = bamRead.map_qual();
             lastQname = bamRead.qname();
             isLastSet = true;
+#ifdef DEBUG_ASBL
+            log_os << logtag << " Setting lastMapq to " << ((unsigned int)bamRead.map_qual()) << " read is " <<  bamRead.qname() << "\n";
+#endif
 
             if (! (isIndelKeeper
                    || isSemiAlignedKeeper
@@ -295,20 +314,19 @@ getBreakendReads(
             const std::string readKey = std::string(bamRead.qname()) + "_" + flag + "_" + bamIndexStr;
 
 #ifdef DEBUG_ASBL
-            log_os << logtag << "Adding bamrec: " << bamRead << '\n'
-                   << "\tmapq: " << bamRead.pe_map_qual() << '\n'
-                   << "\tread: " << bamRead.get_bam_read() << '\n';
-            log_os << "isIndelKeeper: " << isIndelKeeper
-                   << " isSemiAlignedKeeper: " << isSemiAlignedKeeper
-                   << " isShadowKeeper: " << isShadowKeeper
-                   << '\n';
+            log_os << logtag << " Adding " << readKey << " " << bamRead.pe_map_qual() << " " << bamRead.pos() << "\n"
+                   << bamRead.get_bam_read().get_string() << "\n";
+            log_os << " isIndelKeeper: " << isIndelKeeper;
+            log_os << " isSemiAlignedKeeper: " << isSemiAlignedKeeper << " isShadowKeeper: " << isShadowKeeper << "\n";
 #endif
 
             if (readIndex.count(readKey) == 0)
             {
                 readIndex.insert(std::make_pair(readKey,reads.size()));
                 reads.push_back(bamRead.get_bam_read().get_string());
+                // TODO: Need to doublecheck this
                 if (isReversed) reverseCompStr(reads.back());
+                //if (!bamRead.is_mate_fwd_strand()) reverseCompStr(reads.back());
             }
             else
             {

@@ -775,6 +775,8 @@ findCandidateSV(
     {
 #ifdef DEBUG_SVDATA
         log_os << "SVDATA: Edge failed min edge count of " << minEdgeCount << ".\n";
+        log_os << "SVDATA: edge count 1 " << locus.getEdge(edge.nodeIndex1,edge.nodeIndex2).getCount() << "\n";
+        log_os << "SVDATA: edge count 2 " << locus.getEdge(edge.nodeIndex2,edge.nodeIndex1).getCount() << "\n";
 #endif
         return;
     }

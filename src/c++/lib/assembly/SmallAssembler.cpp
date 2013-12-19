@@ -44,6 +44,7 @@ typedef boost::unordered_map<std::string,unsigned> str_uint_map_t;
 
 
 
+
 /**
  * Adds base @p base to the end (isEnd is true) or start (otherwise) of the contig.
  *
@@ -80,6 +81,42 @@ getEnd(const std::string& contig,
     else       return contig.substr(0,length);
 }
 
+static
+void
+dumpHash(const str_uint_map_t& wordCount,
+         const SmallAssemblerOptions& opt,
+         const unsigned& wordLength) {
+
+
+	std::ofstream outFile;
+	outFile.open("debruijn.graph.dot");
+
+	outFile << "graph {\n";
+	//outFile << "node [shape = doublecircle];\n";
+
+    str_uint_map_t aliasH;
+    unsigned n(0);
+	for (str_uint_map_t::const_iterator ct = wordCount.begin();ct!=wordCount.end();++ct) {
+        aliasH[ct->first] = n++;
+		outFile << aliasH[ct->first] << "[label=\"cov" << ct->second << "\"]\n"; 
+		//outFile << aliasH[ct->first] << "\n"; 
+	}
+	//outFile << ";\n";
+    // need to add edges here
+    static const bool isEnd(true);
+	for (str_uint_map_t::const_iterator ct = wordCount.begin();ct!=wordCount.end();++ct) {
+        std::string tmp(getEnd(ct->first,wordLength-1,isEnd));
+        BOOST_FOREACH(const char symbol, opt.alphabet) {
+            const std::string newKey(addBase(tmp,symbol,isEnd));
+            if (wordCount.find(newKey) != wordCount.end()) {
+                outFile << aliasH[ct->first] << " -- " << aliasH[newKey] << ";\n";
+            }
+        }
+	}
+	outFile << "}\n";
+	outFile.close();
+}
+
 
 
 /**
@@ -98,7 +135,8 @@ walk(const SmallAssemblerOptions& opt,
     contig = seed;
 
 #ifdef DEBUG_ASBL
-    dumpHash(wordCount);
+    //dumpHash(wordCount,opt,wordLength);
+    dumpHash(wordCount,opt,wordLength);
 #endif
 
     std::set<std::string> seenBefore;	// records k-mers already encountered during extension
@@ -137,11 +175,11 @@ walk(const SmallAssemblerOptions& opt,
             BOOST_FOREACH(const char symbol, opt.alphabet)
             {
                 const std::string newKey(addBase(tmp, symbol, isEnd));
-#ifdef DEBUG_ASBL
-                log_os << "Extending end : base " << symbol << " " << newKey << "\n";
-#endif
                 const str_uint_map_t::const_iterator wordCountIter(wordCount.find(newKey));
                 if (wordCountIter == wordCountEnd) continue;
+#ifdef DEBUG_ASBL
+                log_os << "Extending end : base " << symbol << " " << newKey << " " << wordCountIter->second  << "\n";
+#endif
 
                 const unsigned val(wordCountIter->second);
                 totalBaseCount += val;
@@ -181,27 +219,6 @@ walk(const SmallAssemblerOptions& opt,
         log_os << "mode change. Current mode " << mode << "\n";
 #endif
     }
-}
-
-static
-void
-dumpHash(const str_uint_map_t& wordCount) {
-
-
-	std::ofstream outFile;
-	outFile.open("debruijn.graph.out");
-
-	outFile << "digraph debruijn_graph {\n";
-	outFile << "rankdir=LR;\n";
-	outFile << "size=\"8,5\"\n";
-	outFile << "node [shape = doublecircle];\n";
-
-	for (str_uint_map_t::const_iterator ct = wordCount.begin();ct!=wordCount.end();++ct) {
-		outFile << " " << ct->first;
-	}
-	outFile << "\n";
-	outFile << "}\n";
-	outFile.close();
 }
 
 static
