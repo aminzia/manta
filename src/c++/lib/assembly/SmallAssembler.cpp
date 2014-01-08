@@ -27,7 +27,7 @@
 #include <limits>
 
 // compile with this macro to get verbose output:
-//#define DEBUG_ASBL
+#define DEBUG_ASBL
 
 
 // stream used by DEBUG_ASBL:
@@ -276,7 +276,7 @@ buildContigs(
     log_os << logtag << "In SmallAssembler::buildContig. word length=" << wordLength << " readCount: " << readCount << "\n";
     for (unsigned readIndex(0); readIndex<readCount; ++readIndex)
     {
-        log_os << reads[readIndex] << " used=" << readInfo[readIndex].isUsed << "\n";
+        log_os << reads[readIndex].first << "  " << reads[readIndex].second << " used=" << readInfo[readIndex].isUsed << "\n";
     }
 #endif
 
