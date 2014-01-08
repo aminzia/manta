@@ -323,9 +323,8 @@ getBreakendReads(
             if (readIndex.count(readKey) == 0)
             {
                 readIndex.insert(std::make_pair(readKey,reads.size()));
-                reads.push_back(bamRead.get_bam_read().get_string());
-                // TODO: Need to doublecheck this
-                if (isReversed) reverseCompStr(reads.back());
+                reads.push_back(std::make_pair(bamRead.pos(),bamRead.get_bam_read().get_string()));
+                if (isReversed) reverseCompStr(reads.back().second);
                 //if (!bamRead.is_mate_fwd_strand()) reverseCompStr(reads.back());
             }
             else

@@ -22,10 +22,9 @@
 #include "boost/unordered_map.hpp"
 
 #include <cassert>
-
 #include <vector>
-
 #include <fstream>
+#include <limits>
 
 // compile with this macro to get verbose output:
 //#define DEBUG_ASBL
@@ -41,8 +40,10 @@
 
 // maps kmers to positions in read
 typedef boost::unordered_map<std::string,unsigned> str_uint_map_t;
+// keeps track of k-mers
+typedef boost::unordered_map<std::string,bool> str_bool_map_t;
 
-
+static const std::string alphabet("ACGT");
 
 
 /**
@@ -84,29 +85,23 @@ getEnd(const std::string& contig,
 static
 void
 dumpHash(const str_uint_map_t& wordCount,
-         const SmallAssemblerOptions& opt,
          const unsigned& wordLength) {
 
 
 	std::ofstream outFile;
 	outFile.open("debruijn.graph.dot");
-
 	outFile << "graph {\n";
-	//outFile << "node [shape = doublecircle];\n";
-
     str_uint_map_t aliasH;
     unsigned n(0);
 	for (str_uint_map_t::const_iterator ct = wordCount.begin();ct!=wordCount.end();++ct) {
         aliasH[ct->first] = n++;
 		outFile << aliasH[ct->first] << "[label=\"cov" << ct->second << "\"]\n"; 
-		//outFile << aliasH[ct->first] << "\n"; 
 	}
-	//outFile << ";\n";
     // need to add edges here
     static const bool isEnd(true);
 	for (str_uint_map_t::const_iterator ct = wordCount.begin();ct!=wordCount.end();++ct) {
         std::string tmp(getEnd(ct->first,wordLength-1,isEnd));
-        BOOST_FOREACH(const char symbol, opt.alphabet) {
+        BOOST_FOREACH(const char symbol, alphabet) {
             const std::string newKey(addBase(tmp,symbol,isEnd));
             if (wordCount.find(newKey) != wordCount.end()) {
                 outFile << aliasH[ct->first] << " -- " << aliasH[newKey] << ";\n";
@@ -117,7 +112,51 @@ dumpHash(const str_uint_map_t& wordCount,
 	outFile.close();
 }
 
+/* Prototype of a DFS traversal, not used at the moment
+static
+void
+doDFS(const str_uint_map_t& wordCount,
+	  const std::string& v,
+	  const unsigned wordLength,
+	  str_bool_map_t& seenVertices,
+	  const std::string& tmpContig,
+	  std::vector<std::string>& contigs) {
 
+	static const bool isEnd(true);
+
+	// when to add a new contig to list?
+	// if no new neighbours are left!
+
+	seenVertices[v] = true;
+
+	std::string tmp(getEnd(v,wordLength-1,isEnd));
+	bool neighbourFound(false);
+	BOOST_FOREACH(const char symbol, alphabet) {
+		const std::string newKey(addBase(tmp,symbol,isEnd));
+	    if (wordCount.find(newKey) != wordCount.end() && !seenVertices[v]) {
+	    	std::string newCtg = tmpContig;
+	    	newCtg += symbol;
+	    	doDFS(wordCount,newKey,wordLength,seenVertices,newCtg,contigs);
+	    	neighbourFound=true;
+	    }
+	}
+	if (!neighbourFound) {
+		contigs.push_back(tmpContig);
+	}
+}
+
+static
+void
+initDFS(const str_uint_map_t& wordCount,
+		const std::string& seed,
+		const unsigned wordLength,
+		std::vector<std::string>& contigs) {
+
+	str_bool_map_t seenVertices;
+	std::string tmpContig("");
+	doDFS(wordCount, seed, wordLength, seenVertices, tmpContig, contigs);
+}
+*/
 
 /**
  * Extends the seed contig (aka most frequent k-mer)
@@ -135,8 +174,7 @@ walk(const SmallAssemblerOptions& opt,
     contig = seed;
 
 #ifdef DEBUG_ASBL
-    //dumpHash(wordCount,opt,wordLength);
-    dumpHash(wordCount,opt,wordLength);
+    dumpHash(wordCount,wordLength);
 #endif
 
     std::set<std::string> seenBefore;	// records k-mers already encountered during extension
@@ -170,9 +208,9 @@ walk(const SmallAssemblerOptions& opt,
 
             unsigned maxBaseCount(0);
             unsigned totalBaseCount(0);
-            char maxBase(opt.alphabet[0]);
+            char maxBase(alphabet[0]);
 
-            BOOST_FOREACH(const char symbol, opt.alphabet)
+            BOOST_FOREACH(const char symbol, alphabet)
             {
                 const std::string newKey(addBase(tmp, symbol, isEnd));
                 const str_uint_map_t::const_iterator wordCountIter(wordCount.find(newKey));
@@ -235,7 +273,7 @@ buildContigs(
 
 #ifdef DEBUG_ASBL
     static const std::string logtag("buildContigs: ");
-    log_os << logtag << "In SVLocusAssembler::buildContig. word length=" << wordLength << " readCount: " << readCount << "\n";
+    log_os << logtag << "In SmallAssembler::buildContig. word length=" << wordLength << " readCount: " << readCount << "\n";
     for (unsigned readIndex(0); readIndex<readCount; ++readIndex)
     {
         log_os << reads[readIndex] << " used=" << readInfo[readIndex].isUsed << "\n";
@@ -252,6 +290,9 @@ buildContigs(
     unsigned maxWordCount(0);
     std::string maxWord;
 
+    int firstWordPos(std::numeric_limits<int>::max());
+    std::string firstWord;
+
     for (unsigned readIndex(0); readIndex<readCount; ++readIndex)
     {
         const AssemblyReadInfo& rinfo(readInfo[readIndex]);
@@ -260,7 +301,7 @@ buildContigs(
         if (rinfo.isUsed) continue;
 
         // stores the index of a kmer in a read sequence
-        const std::string& seq(reads[readIndex]);
+        const std::string& seq(reads[readIndex].second);
         const unsigned readLen(seq.size());
 
         // this read is unusable for assembly:
@@ -292,6 +333,11 @@ buildContigs(
                 maxWordCount  = wordCount[word];
                 maxWord = word;
             }
+
+            if(reads[readIndex].first<firstWordPos && j==0) {
+            	firstWord = word;
+            	firstWordPos = reads[readIndex].first;
+            }
         }
     }
 
@@ -304,12 +350,14 @@ buildContigs(
     }
 
 #ifdef DEBUG_ASBL
-    log_os << logtag << "Seeding kmer : " << maxWord << "\n";
+    //log_os << logtag << "Seeding kmer : " << maxWord << "\n";
+    log_os << logtag << "Seeding kmer : " << firstWord << "\n";
 #endif
 
     // start initial assembly with most frequent kmer as seed
     AssembledContig contig;
-    walk(opt,maxWord,wordLength,wordCount,contig.seq);
+    //walk(opt,maxWord,wordLength,wordCount,contig.seq);
+    walk(opt,firstWord,wordLength,wordCount,contig.seq);
 
     // done with this now:
     wordCount.clear();
@@ -387,7 +435,7 @@ runSmallAssembler(
     static const std::string logtag("runSmallAssembler: ");
     log_os << logtag << "Starting assembly with " << reads.size() << " reads.\n";
 #endif
-    assert(opt.alphabet.size()>1);
+    assert(alphabet.size()>1);
 
     assembledReadInfo.clear();
     contigs.clear();

@@ -19,6 +19,8 @@
 
 #include "SmallAssembler.hh"
 
+#include <utility>
+
 
 BOOST_AUTO_TEST_SUITE( test_SmallAssembler )
 
@@ -36,11 +38,11 @@ BOOST_AUTO_TEST_CASE( test_SmallAssembler1 )
 
     AssemblyReadInput reads;
 
-    reads.push_back("ACGTGTATTACC");
-    reads.push_back(  "GTGTATTACCTA");
-    reads.push_back(      "ATTACCTAGTAC");
-    reads.push_back(        "TACCTAGTACTC");
-    reads.push_back("123456789123");
+    reads.push_back(std::make_pair(1,"ACGTGTATTACC"));
+    reads.push_back(std::make_pair(2,  "GTGTATTACCTA"));
+    reads.push_back(std::make_pair(3,      "ATTACCTAGTAC"));
+    reads.push_back(std::make_pair(4,        "TACCTAGTACTC"));
+    reads.push_back(std::make_pair(5,"123456789123"));
 
     AssemblyReadOutput readInfo;
     Assembly contigs;

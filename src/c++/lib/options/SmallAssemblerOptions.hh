@@ -24,7 +24,7 @@ struct SmallAssemblerOptions
 {
     /// sets reasonable default values for 30x DNA-seq, 100bp reads
     SmallAssemblerOptions() :
-        alphabet("ACGT"),
+        //alphabet("ACGT"),
         minWordLength(41),
         maxWordLength(76),
         wordStepSize(5),
@@ -35,7 +35,7 @@ struct SmallAssemblerOptions
         maxAssemblyIterations(10)
     {}
 
-    std::string alphabet; ///< the symbol set used during assembly
+    //std::string alphabet; ///< the symbol set used during assembly
     unsigned minWordLength; ///< initial word (kmer) length
     unsigned maxWordLength; ///< max word length
     unsigned wordStepSize;
