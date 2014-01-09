@@ -112,7 +112,7 @@ dumpHash(const str_uint_map_t& wordCount,
 	outFile.close();
 }
 
-/* Prototype of a DFS traversal, not used at the moment
+// Prototype of a DFS traversal
 static
 void
 doDFS(const str_uint_map_t& wordCount,
@@ -122,10 +122,8 @@ doDFS(const str_uint_map_t& wordCount,
 	  const std::string& tmpContig,
 	  std::vector<std::string>& contigs) {
 
+	// we walk only to the left
 	static const bool isEnd(true);
-
-	// when to add a new contig to list?
-	// if no new neighbours are left!
 
 	seenVertices[v] = true;
 
@@ -133,14 +131,18 @@ doDFS(const str_uint_map_t& wordCount,
 	bool neighbourFound(false);
 	BOOST_FOREACH(const char symbol, alphabet) {
 		const std::string newKey(addBase(tmp,symbol,isEnd));
-	    if (wordCount.find(newKey) != wordCount.end() && !seenVertices[v]) {
+		std::cout << "Testing branch " << newKey << " " << symbol << "\n";
+	    if (wordCount.find(newKey) != wordCount.end() && !seenVertices[newKey]) {
 	    	std::string newCtg = tmpContig;
 	    	newCtg += symbol;
+	    	std::cout << "Yuhuuu! new contig " << newCtg << "\n";
 	    	doDFS(wordCount,newKey,wordLength,seenVertices,newCtg,contigs);
 	    	neighbourFound=true;
 	    }
 	}
 	if (!neighbourFound) {
+		// at the end of a branch, save contig
+		std::cout << "Branch end: ctg=" << tmpContig << std::endl;
 		contigs.push_back(tmpContig);
 	}
 }
@@ -148,15 +150,15 @@ doDFS(const str_uint_map_t& wordCount,
 static
 void
 initDFS(const str_uint_map_t& wordCount,
-		const std::string& seed,
+		const std::string& startVertex,
 		const unsigned wordLength,
 		std::vector<std::string>& contigs) {
 
 	str_bool_map_t seenVertices;
-	std::string tmpContig("");
-	doDFS(wordCount, seed, wordLength, seenVertices, tmpContig, contigs);
+	std::string tmpContig=startVertex;
+	doDFS(wordCount, startVertex, wordLength, seenVertices, tmpContig, contigs);
 }
-*/
+
 
 /**
  * Extends the seed contig (aka most frequent k-mer)
@@ -322,7 +324,7 @@ buildContigs(
             }
 
             // record (0-indexed) start point for word in read
-            //cout << "Recording " << word << " at " << j << "\n";
+            std::cout << "Recording " << word << " at " << j << "\n";
             readWordOffset[word]=j;
 
             // count occurrences
@@ -357,7 +359,21 @@ buildContigs(
     // start initial assembly with most frequent kmer as seed
     AssembledContig contig;
     //walk(opt,maxWord,wordLength,wordCount,contig.seq);
-    walk(opt,firstWord,wordLength,wordCount,contig.seq);
+    //walk(opt,firstWord,wordLength,wordCount,contig.seq);
+
+
+    /*initDFS(const str_uint_map_t& wordCount,
+    		const std::string& startVertex,
+    		const unsigned wordLength,
+    		std::vector<std::string>& contigs)*/
+
+    std::vector<std::string> contigSeq;
+
+    initDFS(wordCount,firstWord,wordLength,contigSeq);
+
+    assert(contigSeq.size() != 0);
+    contig.seq = contigSeq[0];
+    contig.seedReadCount = maxWordCount;
 
     // done with this now:
     wordCount.clear();

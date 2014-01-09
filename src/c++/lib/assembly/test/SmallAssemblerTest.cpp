@@ -49,8 +49,9 @@ BOOST_AUTO_TEST_CASE( test_SmallAssembler1 )
 
     runSmallAssembler(assembleOpt, reads, readInfo, contigs);
 
-    /*BOOST_REQUIRE_EQUAL(contigs.size(),1u);
-    BOOST_REQUIRE_EQUAL(contigs[0].seq,"GTGTATTACCTAGTAC");
+    BOOST_REQUIRE_EQUAL(contigs.size(),1u);
+    /*BOOST_REQUIRE_EQUAL(contigs[0].seq,"GTGTATTACCTAGTAC");
+     * new contig is = ACGTGTATTACCTAGTACTC
     for (unsigned i(0); i<4; ++i)
     {
         BOOST_REQUIRE(readInfo[i].isUsed);
