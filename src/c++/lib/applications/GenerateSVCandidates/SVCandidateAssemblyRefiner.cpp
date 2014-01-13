@@ -29,7 +29,7 @@
 
 #include <iostream>
 
-#define DEBUG_REFINER
+//#define DEBUG_REFINER
 
 
 #ifdef DEBUG_REFINER

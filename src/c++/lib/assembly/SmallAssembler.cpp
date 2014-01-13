@@ -27,7 +27,7 @@
 #include <limits>
 
 // compile with this macro to get verbose output:
-#define DEBUG_ASBL
+//#define DEBUG_ASBL
 
 
 // stream used by DEBUG_ASBL:
@@ -45,6 +45,7 @@ typedef boost::unordered_map<std::string,bool> str_bool_map_t;
 
 static const std::string alphabet("ACGT");
 
+static const unsigned MIN_KMER_FREQ = 1;
 
 /**
  * Adds base @p base to the end (isEnd is true) or start (otherwise) of the contig.
@@ -57,8 +58,7 @@ addBase(const std::string& contig,
         const char base,
         const bool isEnd)
 {
-    if (isEnd) return contig + base;
-    else       return base + contig;
+    return isEnd ? (contig + base) : (base + contig);
 }
 
 
@@ -85,17 +85,28 @@ getEnd(const std::string& contig,
 static
 void
 dumpHash(const str_uint_map_t& wordCount,
-         const unsigned& wordLength) {
+         const unsigned wordLength) {
 
+	std::ofstream outDotFile;
+	std::ofstream outTxtFile;
+    std::stringstream sstr;
+    sstr << "debruijn.graph.k";
+    sstr << wordLength;
 
-	std::ofstream outFile;
-	outFile.open("debruijn.graph.dot");
-	outFile << "graph {\n";
+    std::string outFileStem(sstr.str().c_str());
+    std::string dotFileName = outFileStem + ".dot";
+    std::string txtFileName = outFileStem + ".txt";
+
+	outDotFile.open(dotFileName.c_str());
+	outTxtFile.open(txtFileName.c_str());
+
+	outDotFile << "graph {\n";
     str_uint_map_t aliasH;
     unsigned n(0);
 	for (str_uint_map_t::const_iterator ct = wordCount.begin();ct!=wordCount.end();++ct) {
         aliasH[ct->first] = n++;
-		outFile << aliasH[ct->first] << "[label=\"cov" << ct->second << "\"]\n"; 
+		outDotFile << aliasH[ct->first] << "[label=\"cov" << ct->second << "\"]\n"; 
+		outTxtFile << "VT " << aliasH[ct->first] << " " << ct->first << " " << ct->second << "\n"; 
 	}
     // need to add edges here
     static const bool isEnd(true);
@@ -104,62 +115,95 @@ dumpHash(const str_uint_map_t& wordCount,
         BOOST_FOREACH(const char symbol, alphabet) {
             const std::string newKey(addBase(tmp,symbol,isEnd));
             if (wordCount.find(newKey) != wordCount.end()) {
-                outFile << aliasH[ct->first] << " -- " << aliasH[newKey] << ";\n";
+                outDotFile << aliasH[ct->first] << " -- " << aliasH[newKey] << ";\n";
+                //outTxtFile << "ED " << aliasH[ct->first] << " " << aliasH[newKey] << "\n";
+                outTxtFile << "ED " << ct->first << " " << newKey << "\n";
             }
         }
 	}
-	outFile << "}\n";
-	outFile.close();
+	outDotFile << "}\n";
+
+	outDotFile.close();
+	outTxtFile.close();
 }
 
 // Prototype of a DFS traversal
 static
 void
 doDFS(const str_uint_map_t& wordCount,
-	  const std::string& v,
+	  const std::string& contigSoFar,
 	  const unsigned wordLength,
 	  str_bool_map_t& seenVertices,
-	  const std::string& tmpContig,
 	  std::vector<std::string>& contigs) {
 
 	// we walk only to the left
 	static const bool isEnd(true);
 
-	seenVertices[v] = true;
 
-	std::string tmp(getEnd(v,wordLength-1,isEnd));
+	std::string tmp(getEnd(contigSoFar,wordLength-1,isEnd));
 	bool neighbourFound(false);
 	BOOST_FOREACH(const char symbol, alphabet) {
-		const std::string newKey(addBase(tmp,symbol,isEnd));
-		std::cout << "Testing branch " << newKey << " " << symbol << "\n";
-	    if (wordCount.find(newKey) != wordCount.end() && !seenVertices[newKey]) {
-	    	std::string newCtg = tmpContig;
+		const std::string overlap(addBase(tmp,symbol,isEnd));
+		//std::cerr << "Testing branch " << overlap << " " << symbol << "\n";
+        //typedef std::pair<str_uint_map_t::const_iterator,str_uint_map_t::const_iterator> iterPair;
+        //iterPair itP = wordCount.equal_range(overlap);
+        //std::cerr << "Hits=" << distance(itP.first,itP.second) << "\n";
+
+        //TODO:: this follows all branches regardless of coverage and repeat nodes
+        // need to see if this is a good thing
+	    if (wordCount.find(overlap) != wordCount.end() && !seenVertices[overlap]) {
+	        seenVertices[overlap] = true;
+	    	std::string newCtg = contigSoFar;
 	    	newCtg += symbol;
-	    	std::cout << "Yuhuuu! new contig " << newCtg << "\n";
-	    	doDFS(wordCount,newKey,wordLength,seenVertices,newCtg,contigs);
+	    	//std::cerr << "Extending contig " << symbol << " " << newCtg << "\n";
+	    	doDFS(wordCount,newCtg,wordLength,seenVertices,contigs);
 	    	neighbourFound=true;
 	    }
 	}
 	if (!neighbourFound) {
 		// at the end of a branch, save contig
-		std::cout << "Branch end: ctg=" << tmpContig << std::endl;
-		contigs.push_back(tmpContig);
+#ifdef DEBUG_ASBL
+		std::cerr << "Branch end: ctg=" << contigSoFar << std::endl;
+#endif
+		contigs.push_back(contigSoFar);
 	}
 }
 
 static
 void
-initDFS(const str_uint_map_t& wordCount,
+initDFS(str_uint_map_t& wordCount,
 		const std::string& startVertex,
 		const unsigned wordLength,
 		std::vector<std::string>& contigs) {
 
+#ifdef DEBUG_ASBL
+    std::cerr << "INIT DFS START " << startVertex << "\n";
+#endif
+
+    // prune hash, remove singleton k-mers
+    /*unsigned pruneCnt(0);
+    for (str_uint_map_t::iterator it=wordCount.begin();
+         it!=wordCount.end();) {
+        if(it->second <= 1)
+        {
+            it = wordCount.erase(it); 
+            ++pruneCnt;
+        } else {
+            ++it;
+        }
+    }
+    std::cerr << "Pruned " << pruneCnt << " k-mers. Remaining " << wordCount.size() << std::endl;*/
+
+#ifdef DEBUG_ASBL
+    dumpHash(wordCount,wordLength);
+#endif
+
 	str_bool_map_t seenVertices;
-	std::string tmpContig=startVertex;
-	doDFS(wordCount, startVertex, wordLength, seenVertices, tmpContig, contigs);
+	doDFS(wordCount, startVertex, wordLength, seenVertices, contigs);
 }
 
 
+#if 0
 /**
  * Extends the seed contig (aka most frequent k-mer)
  *
@@ -260,15 +304,16 @@ walk(const SmallAssemblerOptions& opt,
 #endif
     }
 }
+#endif
 
 static
 bool
 buildContigs(
-    const SmallAssemblerOptions& opt,
+    const SmallAssemblerOptions& /*opt*/,
     const AssemblyReadInput& reads,
     AssemblyReadOutput& readInfo,
     const unsigned wordLength,
-    Assembly& contigs,
+    Assembly& finalContigs,
     unsigned& unusedReads)
 {
     const unsigned readCount(reads.size());
@@ -289,8 +334,8 @@ buildContigs(
     str_uint_map_t wordCount;
 
     // most frequent kmer and its number of occurrences
-    unsigned maxWordCount(0);
-    std::string maxWord;
+    //unsigned maxWordCount(0);
+    //std::string maxWord;
 
     int firstWordPos(std::numeric_limits<int>::max());
     std::string firstWord;
@@ -324,17 +369,16 @@ buildContigs(
             }
 
             // record (0-indexed) start point for word in read
-            std::cout << "Recording " << word << " at " << j << "\n";
+            //std::cerr << "Recording " << word << " at " << j << " in " << seq <<  "\n";
             readWordOffset[word]=j;
 
             // count occurrences
             ++wordCount[word];
-            if (wordCount[word]>maxWordCount)
+            /*if (wordCount[word]>maxWordCount)
             {
-                //cout << "Setting max word to " << maxWord << " " << maxOcc << "\n";
                 maxWordCount  = wordCount[word];
                 maxWord = word;
-            }
+            }*/
 
             if(reads[readIndex].first<firstWordPos && j==0) {
             	firstWord = word;
@@ -343,13 +387,14 @@ buildContigs(
         }
     }
 
-    if (maxWordCount < opt.minCoverage)
+/*    if (maxWordCount < opt.minCoverage)
     {
 #ifdef DEBUG_ASBL
         log_os << logtag << "Coverage too low : " << maxWordCount << " " << opt.minCoverage << "\n";
 #endif
         return false;
     }
+*/
 
 #ifdef DEBUG_ASBL
     //log_os << logtag << "Seeding kmer : " << maxWord << "\n";
@@ -357,44 +402,41 @@ buildContigs(
 #endif
 
     // start initial assembly with most frequent kmer as seed
-    AssembledContig contig;
+    //AssembledContig contig;
     //walk(opt,maxWord,wordLength,wordCount,contig.seq);
     //walk(opt,firstWord,wordLength,wordCount,contig.seq);
 
-
-    /*initDFS(const str_uint_map_t& wordCount,
-    		const std::string& startVertex,
-    		const unsigned wordLength,
-    		std::vector<std::string>& contigs)*/
-
-    std::vector<std::string> contigSeq;
-
+    typedef std::vector<std::string> AssembledSequence;
+    AssembledSequence contigSeq;
     initDFS(wordCount,firstWord,wordLength,contigSeq);
 
+    /*std::cerr << "RESULTS FOR " << firstWord << "\n";
+    for (AssembledSequence::const_iterator ct = contigSeq.begin(); ct!=contigSeq.end(); ++ct) {
+        std::cerr << "ASSEMBLED CTG " << *ct << "\n";
+    }*/
+
     assert(contigSeq.size() != 0);
-    contig.seq = contigSeq[0];
-    contig.seedReadCount = maxWordCount;
+    //contig.seedReadCount = maxWordCount;
 
     // done with this now:
     wordCount.clear();
 
-    const unsigned contigSize(contig.seq.size());
 
-#ifdef DEBUG_ASBL
-    log_os << logtag << "First pass assembly resulted in "
+/*#ifdef DEBUG_ASBL
+    log_os << logtag << " Assembled sequence="
            << contig.seq << "\n"
-           << " with length " << contigSize << ". Input consisted of " << readCount << " reads.\n";
-#endif
+           << " length=" << contigSize << ". Input=" << readCount << " reads.\n";
+#endif*/
 
     // increment number of reads containing the seeding kmer
-    for (unsigned readIndex(0); readIndex<readCount; ++readIndex)
+    /*for (unsigned readIndex(0); readIndex<readCount; ++readIndex)
     {
         const str_uint_map_t& readWordOffset(readWordOffsets[readIndex]);
         if (readWordOffset.count(maxWord)) ++contig.seedReadCount;
     }
 
 #ifdef DEBUG_ASBL
-    log_os << logtag << "final seeding reading count: " << contig.seedReadCount << "\n";
+    log_os << logtag << " final seeding reading count: " << contig.seedReadCount << "\n";
 #endif
     if (contig.seedReadCount < opt.minSeedReads)
     {
@@ -402,39 +444,52 @@ buildContigs(
         log_os << "\t...which is below minSeedReadCount of " << opt.minSeedReads << " discarding.\n";
 #endif
         return false;
-    }
+    }*/
 
-    // finally -- set isUsed and decrement unusedReads
-    for (unsigned readIndex(0); readIndex<readCount; ++readIndex)
+    for (AssembledSequence::const_iterator ctgIter = contigSeq.begin(); ctgIter != contigSeq.end(); ++ctgIter) 
     {
-        const str_uint_map_t& readWordOffset(readWordOffsets[readIndex]);
-        AssemblyReadInfo& rinfo(readInfo[readIndex]);
 
-        if (rinfo.isUsed) continue;
+        // throw away short stuff
+        if (ctgIter->length() < 100) continue;
 
-        // store all reads sharing k-mers of the current word length with the contig
-        // TODO: check if we still needs this
-        for (unsigned j(0); j<=(contigSize-wordLength); ++j)
+        AssembledContig contig;
+        contig.seq = *ctgIter;
+
+        // finally -- set isUsed and decrement unusedReads
+        const unsigned contigSize(contig.seq.size());
+        for (unsigned readIndex(0); readIndex<readCount; ++readIndex) 
         {
-            const std::string word(contig.seq.substr(j,wordLength));
-            //cout << "Testing word " << word << " " << readNum << "\n";
-            //cout << "with counts : " << wordCount[word] << "\n";
-            if (readWordOffset.count(word))
-            {
-                rinfo.isUsed = true;
-                rinfo.contigId = contigs.size();
+            const str_uint_map_t& readWordOffset(readWordOffsets[readIndex]);
+            AssemblyReadInfo& rinfo(readInfo[readIndex]);
 
-                assert(unusedReads != 0);
-                --unusedReads;
-                break;
+            if (rinfo.isUsed) continue;
+
+            // store all reads sharing k-mers of the current word length with the contig
+            for (unsigned j(0); j<=(contigSize-wordLength); ++j) 
+            {
+                const std::string word(contig.seq.substr(j,wordLength));
+                //cerr << "Testing word " << word << " " << readNum << "\n";
+                //cerr << "with counts : " << wordCount[word] << "\n";
+                if (readWordOffset.count(word))
+                {
+                    rinfo.isUsed = true;
+                    rinfo.contigId = finalContigs.size();
+
+                    assert(unusedReads != 0);
+                    --unusedReads;
+
+                    ++contig.seedReadCount;
+                    break;
+                }
             }
         }
+        finalContigs.push_back(contig);
     }
 
     // don't need this anymore:
     readWordOffsets.clear();
 
-    contigs.push_back(contig);
+    //contigs.push_back(contig);
     return true;
 }
 
@@ -468,6 +523,7 @@ runSmallAssembler(
         const unsigned lastUnusedReads(unusedReads);
         for (; wordLength<=opt.maxWordLength; wordLength+=opt.wordStepSize)
         {
+            //std::cerr << "Starting assembly with k=" << wordLength << " iter= " << iteration << "\n";
             const bool isAssemblySuccess = buildContigs(opt, reads, assembledReadInfo, wordLength, contigs, unusedReads);
             if (isAssemblySuccess) break;
         }

@@ -27,7 +27,7 @@
 #include <iostream>
 
 
-#define DEBUG_ASBL
+//#define DEBUG_ASBL
 
 
 
@@ -303,7 +303,7 @@ getBreakendReads(
                    || isSemiAlignedKeeper
                    || isShadowKeeper
                   )) continue;
-
+            
 #ifdef DEBUG_ASBL
             if (isIndelKeeper) ++indelCount;
             if (isSemiAlignedKeeper) ++semiAlignedCount;
