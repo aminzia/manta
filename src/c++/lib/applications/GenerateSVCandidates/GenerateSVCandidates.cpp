@@ -181,6 +181,12 @@ struct SVWriter
         if (modelScoreInfo.diploid.altScore >= opt.diploidOpt.minOutputAltScore)
         {
             diploidWriter.writeSV(edge, svData, assemblyData, sv, modelScoreInfo);
+        } 
+        else 
+        {
+#ifdef DEBUG_GSV
+            log_os << logtag << "Filtering out candidate below min output alt score (" << opt.diploidOpt.minOutputAltScore << ") at scoring stage\n";
+#endif
         }
 
         if (isSomatic)
