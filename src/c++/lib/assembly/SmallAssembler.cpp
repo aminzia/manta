@@ -36,6 +36,9 @@
 #include <iostream>
 #endif
 
+// TODO: Some ideas:
+// * Store list of reference/read end k-mer. Enforce that the contig finishes with an end k-mer.
+// * Compute average coverage per contig.
 
 
 // maps kmers to positions in read
@@ -45,7 +48,28 @@ typedef boost::unordered_map<std::string,bool> str_bool_map_t;
 
 static const std::string alphabet("ACGT");
 
-static const unsigned MIN_KMER_FREQ = 1;
+//static const unsigned MIN_KMER_FREQ = 1;
+
+struct DfsContig {
+
+	DfsContig() :
+		sequence(""),
+		avgCoverage(0),
+		numKmers(0)
+	{}
+
+	DfsContig(const DfsContig & c) :
+		sequence(c.sequence),
+		avgCoverage(c.avgCoverage),
+		numKmers(c.numKmers)
+	{}
+
+	std::string sequence;
+	float avgCoverage;
+	int numKmers;
+};
+
+
 
 /**
  * Adds base @p base to the end (isEnd is true) or start (otherwise) of the contig.
@@ -131,16 +155,15 @@ dumpHash(const str_uint_map_t& wordCount,
 static
 void
 doDFS(const str_uint_map_t& wordCount,
-	  const std::string& contigSoFar,
+	  const DfsContig& contigSoFar,
 	  const unsigned wordLength,
 	  str_bool_map_t& seenVertices,
-	  std::vector<std::string>& contigs) {
+	  std::vector<DfsContig>& contigs) {
 
 	// we walk only to the left
 	static const bool isEnd(true);
 
-
-	std::string tmp(getEnd(contigSoFar,wordLength-1,isEnd));
+	std::string tmp(getEnd(contigSoFar.sequence,wordLength-1,isEnd));
 	bool neighbourFound(false);
 	BOOST_FOREACH(const char symbol, alphabet) {
 		const std::string overlap(addBase(tmp,symbol,isEnd));
@@ -149,12 +172,18 @@ doDFS(const str_uint_map_t& wordCount,
         //iterPair itP = wordCount.equal_range(overlap);
         //std::cerr << "Hits=" << distance(itP.first,itP.second) << "\n";
 
-        //TODO:: this follows all branches regardless of coverage and repeat nodes
+        //TODO:: this follows all branches regardless of coverage
         // need to see if this is a good thing
-	    if (wordCount.find(overlap) != wordCount.end() && !seenVertices[overlap]) {
+		str_uint_map_t::const_iterator ct = wordCount.find(overlap);
+	    if (ct != wordCount.end() && !seenVertices[overlap]) {
 	        seenVertices[overlap] = true;
-	    	std::string newCtg = contigSoFar;
-	    	newCtg += symbol;
+	        // copy contig sequence
+	    	DfsContig newCtg(contigSoFar);
+	     	newCtg.sequence += symbol;
+	     	// update running average of coverage
+	     	newCtg.avgCoverage = (ct->second+newCtg.numKmers*newCtg.avgCoverage)/(newCtg.numKmers+1);
+	     	++newCtg.numKmers;
+
 	    	//std::cerr << "Extending contig " << symbol << " " << newCtg << "\n";
 	    	doDFS(wordCount,newCtg,wordLength,seenVertices,contigs);
 	    	neighbourFound=true;
@@ -163,7 +192,7 @@ doDFS(const str_uint_map_t& wordCount,
 	if (!neighbourFound) {
 		// at the end of a branch, save contig
 #ifdef DEBUG_ASBL
-		std::cerr << "Branch end: ctg=" << contigSoFar << std::endl;
+		std::cerr << "Branch end: ctg=" << contigSoFar.sequence << " cov=" << contigSoFar.avgCoverage << " numKmers=" << contigSoFar.numKmers << std::endl;
 #endif
 		contigs.push_back(contigSoFar);
 	}
@@ -174,7 +203,7 @@ void
 initDFS(str_uint_map_t& wordCount,
 		const std::string& startVertex,
 		const unsigned wordLength,
-		std::vector<std::string>& contigs) {
+		std::vector<DfsContig>& contigs) {
 
 #ifdef DEBUG_ASBL
     std::cerr << "INIT DFS START " << startVertex << "\n";
@@ -184,7 +213,7 @@ initDFS(str_uint_map_t& wordCount,
     /*unsigned pruneCnt(0);
     for (str_uint_map_t::iterator it=wordCount.begin();
          it!=wordCount.end();) {
-        if(it->second <= 1)
+        if(it->second <= MIN_KMER_FREQ)
         {
             it = wordCount.erase(it); 
             ++pruneCnt;
@@ -199,7 +228,10 @@ initDFS(str_uint_map_t& wordCount,
 #endif
 
 	str_bool_map_t seenVertices;
-	doDFS(wordCount, startVertex, wordLength, seenVertices, contigs);
+	DfsContig ctg;
+	ctg.sequence = startVertex;
+	ctg.avgCoverage = 0;
+	doDFS(wordCount, ctg, wordLength, seenVertices, contigs);
 }
 
 
@@ -406,7 +438,7 @@ buildContigs(
     //walk(opt,maxWord,wordLength,wordCount,contig.seq);
     //walk(opt,firstWord,wordLength,wordCount,contig.seq);
 
-    typedef std::vector<std::string> AssembledSequence;
+    typedef std::vector<DfsContig> AssembledSequence;
     AssembledSequence contigSeq;
     initDFS(wordCount,firstWord,wordLength,contigSeq);
 
@@ -450,10 +482,10 @@ buildContigs(
     {
 
         // throw away short stuff
-        if (ctgIter->length() < 100) continue;
+        if (ctgIter->sequence.length() < 100) continue;
 
         AssembledContig contig;
-        contig.seq = *ctgIter;
+        contig.seq = ctgIter->sequence;
 
         // finally -- set isUsed and decrement unusedReads
         const unsigned contigSize(contig.seq.size());
