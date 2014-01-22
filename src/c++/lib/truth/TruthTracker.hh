@@ -99,7 +99,7 @@ class SVLog
 {
 public:
     enum Outcome { UNKNOWN, WRITTEN, SPAWNED, IMPRECISE_NON_SPANNING,
-                   LOW_SPANNING_COUNT, LOW_SOMATIC_SCORE
+                   LOW_SPANNING_COUNT, LOW_ALT_SCORE, LOW_SOMATIC_SCORE
                  };
 
     SVLog(unsigned int index);

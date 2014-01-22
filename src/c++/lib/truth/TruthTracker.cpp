@@ -258,6 +258,9 @@ std::ostream& operator<<(std::ostream& ostrm, const SVLog::Outcome outcome)
     case SVLog::LOW_SPANNING_COUNT:
         ostrm << "LowSpanningCount";
         break;
+    case SVLog::LOW_ALT_SCORE:
+        ostrm << "LowAltScore";
+        break;
     case SVLog::LOW_SOMATIC_SCORE:
         ostrm << "LowSomaticScore";
         break;
