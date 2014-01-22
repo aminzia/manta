@@ -109,13 +109,16 @@ getEnd(const std::string& contig,
 static
 void
 dumpHash(const str_uint_map_t& wordCount,
-         const unsigned wordLength) {
+         const unsigned wordLength,
+         const unsigned iteration) {
 
 	std::ofstream outDotFile;
 	std::ofstream outTxtFile;
     std::stringstream sstr;
     sstr << "debruijn.graph.k";
     sstr << wordLength;
+    sstr << ".iter";
+    sstr << iteration;
 
     std::string outFileStem(sstr.str().c_str());
     std::string dotFileName = outFileStem + ".dot";
@@ -203,7 +206,12 @@ void
 initDFS(str_uint_map_t& wordCount,
 		const std::string& startVertex,
 		const unsigned wordLength,
-		std::vector<DfsContig>& contigs) {
+		std::vector<DfsContig>& contigs
+#ifdef DEBUG_ASBL
+        ,const unsigned iteration
+#endif
+        )
+         {
 
 #ifdef DEBUG_ASBL
     std::cerr << "INIT DFS START " << startVertex << "\n";
@@ -224,7 +232,7 @@ initDFS(str_uint_map_t& wordCount,
     std::cerr << "Pruned " << pruneCnt << " k-mers. Remaining " << wordCount.size() << std::endl;*/
 
 #ifdef DEBUG_ASBL
-    dumpHash(wordCount,wordLength);
+    dumpHash(wordCount,wordLength,iteration);
 #endif
 
 	str_bool_map_t seenVertices;
@@ -252,7 +260,7 @@ walk(const SmallAssemblerOptions& opt,
     contig = seed;
 
 #ifdef DEBUG_ASBL
-    dumpHash(wordCount,wordLength);
+    dumpHash(wordCount,wordLength,1);
 #endif
 
     std::set<std::string> seenBefore;	// records k-mers already encountered during extension
@@ -346,7 +354,11 @@ buildContigs(
     AssemblyReadOutput& readInfo,
     const unsigned wordLength,
     Assembly& finalContigs,
-    unsigned& unusedReads)
+    unsigned& unusedReads
+#ifdef DEBUG_ASBL
+    , const unsigned iteration
+#endif
+    )
 {
     const unsigned readCount(reads.size());
 
@@ -440,7 +452,11 @@ buildContigs(
 
     typedef std::vector<DfsContig> AssembledSequence;
     AssembledSequence contigSeq;
-    initDFS(wordCount,firstWord,wordLength,contigSeq);
+    initDFS(wordCount,firstWord,wordLength,contigSeq
+#ifdef DEBUG_ASBL
+    , iteration
+#endif
+    );
 
     /*std::cerr << "RESULTS FOR " << firstWord << "\n";
     for (AssembledSequence::const_iterator ct = contigSeq.begin(); ct!=contigSeq.end(); ++ct) {
@@ -556,7 +572,11 @@ runSmallAssembler(
         for (; wordLength<=opt.maxWordLength; wordLength+=opt.wordStepSize)
         {
             //std::cerr << "Starting assembly with k=" << wordLength << " iter= " << iteration << "\n";
-            const bool isAssemblySuccess = buildContigs(opt, reads, assembledReadInfo, wordLength, contigs, unusedReads);
+            const bool isAssemblySuccess = buildContigs(opt, reads, assembledReadInfo, wordLength, contigs, unusedReads
+#ifdef DEBUG_ASBL
+            , iteration
+#endif
+            );
             if (isAssemblySuccess) break;
         }
 
