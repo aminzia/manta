@@ -247,6 +247,9 @@ isSmallSVSegmentFilter(
     const unsigned refSize(apath_read_length(apath));
     if (refSize < minAlignRefSpan)
     {
+#ifdef DEBUG_REFINER
+       log_os << "SV REFINER : Rejecting alignment, refSpan too small: " << refSize << " min AlignRefSpans=" << minAlignRefSpan << "\n";
+#endif
         return true;
     }
 
@@ -912,8 +915,13 @@ getSmallSVAssembly(
         log_os << logtag << "contigIndex: " << contigIndex << " isFilter " << isFilterSmallSV << " alignment: " << alignment;
 #endif
 
-        if (isFilterSmallSV) continue;
-
+        if (isFilterSmallSV)
+        {
+#ifdef DEBUG_REFINER
+       log_os << "SV REFINER : Rejecting alignment, isFilterSmallSV failed \n";
+#endif
+        	continue;
+        }
         // keep the highest scoring QC'd candidate:
         // TODO: we should keep all QC'd candidates for the small event case
         // FIXME : prevents us from finding overlapping events, keep vector of high-scoring contigs?
