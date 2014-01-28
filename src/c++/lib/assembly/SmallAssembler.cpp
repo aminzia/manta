@@ -127,12 +127,28 @@ dumpHash(const str_uint_map_t& wordCount,
 	outDotFile.open(dotFileName.c_str());
 	outTxtFile.open(txtFileName.c_str());
 
+	// kmer nodes with coverage higher than this get a different color
+	static const int lowCovGraphVisThreshold(3);
+	static const std::string lowCovNodeColor("green");
+	static const std::string highCovNodeColor("red");
+
 	outDotFile << "graph {\n";
     str_uint_map_t aliasH;
     unsigned n(0);
 	for (str_uint_map_t::const_iterator ct = wordCount.begin();ct!=wordCount.end();++ct) {
         aliasH[ct->first] = n++;
-		outDotFile << aliasH[ct->first] << "[label=\"cov" << ct->second << "\"]\n"; 
+
+        //graphviz out
+		outDotFile << aliasH[ct->first] << "[label=\"cov" << ct->second << "\" ";
+		if (ct->second>lowCovGraphVisThreshold)
+		{
+			outDotFile << "fillcolor=" << highCovNodeColor << "]";
+		} else {
+			outDotFile << "fillcolor=" << lowCovNodeColor << "]";
+		}
+		outDotFile << "\n";
+
+		// txt output
 		outTxtFile << "VT " << aliasH[ct->first] << " " << ct->first << " " << ct->second << "\n"; 
 	}
     // need to add edges here
