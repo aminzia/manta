@@ -133,18 +133,18 @@ dumpHash(const str_uint_map_t& wordCount,
 	static const std::string highCovNodeColor("red");
 
 	outDotFile << "graph {\n";
+	outDotFile << "node [ style = filled ];\n";
     str_uint_map_t aliasH;
     unsigned n(0);
 	for (str_uint_map_t::const_iterator ct = wordCount.begin();ct!=wordCount.end();++ct) {
         aliasH[ct->first] = n++;
-
         //graphviz out
 		outDotFile << aliasH[ct->first] << "[label=\"cov" << ct->second << "\" ";
 		if (ct->second>lowCovGraphVisThreshold)
 		{
-			outDotFile << "fillcolor=" << highCovNodeColor << "]";
+			outDotFile << "color=" << highCovNodeColor << "]";
 		} else {
-			outDotFile << "fillcolor=" << lowCovNodeColor << "]";
+			outDotFile << "color=" << lowCovNodeColor << "]";
 		}
 		outDotFile << "\n";
 
