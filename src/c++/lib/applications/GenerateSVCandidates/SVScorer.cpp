@@ -26,6 +26,7 @@
 #include "manta/ReadGroupStatsSet.hh"
 #include "manta/SVCandidateUtil.hh"
 
+#include "boost/array.hpp"
 #include "boost/foreach.hpp"
 
 #include <algorithm>
@@ -34,10 +35,12 @@
 
 
 //#define DEBUG_SCORE
+//#define DEBUG_SOMATIC_SCORE
 
-#ifdef DEBUG_SCORE
+#if defined(DEBUG_SCORE) || defined(DEBUG_SOMATIC_SCORE)
 #include "blt_util/log.hh"
 #endif
+
 
 
 
@@ -51,6 +54,7 @@ SVScorer(
     _diploidOpt(opt.diploidOpt),
     _diploidDopt(_diploidOpt),
     _somaticOpt(opt.somaticOpt),
+    _somaticDopt(_somaticOpt),
     _dFilterDiploid(opt.chromDepthFilename, _diploidOpt.maxDepthFactor, header),
     _dFilterSomatic(opt.chromDepthFilename, _somaticOpt.maxDepthFactor, header),
     _readScanner(opt.scanOpt,opt.statsFilename,opt.alignFileOpt.alignmentFilename)
@@ -425,10 +429,11 @@ void
 incrementSpanningPairAlleleLnLhood(
     const ProbSet& chimeraProb,
     const SVFragmentEvidenceAllele& allele,
+    const double power,
     double& bpLnLhood)
 {
     const float fragProb(getSpanningPairAlleleLhood(allele));
-    bpLnLhood += std::log(chimeraProb.comp*fragProb + chimeraProb.prob);
+    bpLnLhood += std::log(chimeraProb.comp*fragProb + chimeraProb.prob)*power;
 }
 
 
@@ -486,8 +491,7 @@ incrementSplitReadLhood(
     static const double baseLnPrior(std::log(0.25));
 
 #ifdef DEBUG_SCORE
-    static const std::string logtag("incrementSplitReadLhood: ");
-    log_os << logtag << "pre-support\n";
+    log_os << __FUNCTION__ << ": pre-support\n";
 #endif
 
     if (! fragev.isAnySplitReadSupport(isRead1))
@@ -497,7 +501,7 @@ incrementSplitReadLhood(
     }
 
 #ifdef DEBUG_SCORE
-    log_os << logtag << "post-support\n";
+    log_os << __FUNCTION__ << ": post-support\n";
 #endif
 
     const unsigned readSize(fragev.getRead(isRead1).size);
@@ -511,11 +515,11 @@ incrementSplitReadLhood(
     static const ProbSet altMapProb(1e-4);
 
 #ifdef DEBUG_SCORE
-    log_os << logtag << "starting ref\n";
+    log_os << __FUNCTION__ << ": starting ref\n";
 #endif
     incrementAlleleSplitReadLhood(refMapProb, altMapProb, fragev.ref, readLnPrior, isRead1, refSplitLnLhood, isReadEvaluated);
 #ifdef DEBUG_SCORE
-    log_os << logtag << "starting alt\n";
+    log_os << __FUNCTION__ << ": starting alt\n";
 #endif
     incrementAlleleSplitReadLhood(altMapProb, refMapProb, fragev.alt, readLnPrior, isRead1, altSplitLnLhood, isReadEvaluated);
 }
@@ -574,8 +578,171 @@ getFragLnLhood(
 
 
 
-/// don't use pairs for small variants, need to improve the model to take advantage of these first:
-static const int minPairVariantSize(500);
+/// when an sv is treated as 'small', we skip all paired-read evidence and rely on split reads only:
+///
+/// with further model improvements we can add pairs back into the small variant calls:
+///
+static
+bool
+isTreatAsSmallSV(
+    const SVCandidate& sv,
+    const bool isSmallAssembler)
+{
+    static const int minPairVariantSize(500);
+
+    if (! isSmallAssembler) return false;
+    const int svSize(std::abs(sv.bp2.interval.range.center_pos() - sv.bp1.interval.range.center_pos()));
+    return (svSize<minPairVariantSize);
+}
+
+
+static
+float
+largeNoiseSVPriorWeight(
+    const SVCandidate& sv)
+{
+    static const int smallSize(5000);
+    static const int largeSize(10000);
+
+    const int svSize(std::abs(sv.bp2.interval.range.center_pos() - sv.bp1.interval.range.center_pos()));
+    return std::min(static_cast<float>(std::max(svSize-smallSize,0))/static_cast<float>(largeSize),1.f);
+}
+
+
+
+/// return true if any evidence exists for fragment:
+///
+/// \param semiMappedPower multiply out semi-mapped reads (in log space) by this value
+///
+static
+bool
+getRefAltFromFrag(
+    const bool isSmallSV,
+    const double semiMappedPower,
+    const ProbSet& chimeraProb,
+    const SVFragmentEvidence& fragev,
+    AlleleLnLhood& refLnLhoodSet,
+    AlleleLnLhood& altLnLhoodSet,
+    bool& isRead1Evaluated,
+    bool& isRead2Evaluated)
+{
+#ifdef DEBUG_SCORE
+    log_os << __FUNCTION__ << ": qname: " << /*val.first <<*/ " fragev: " << fragev << "\n";
+#endif
+
+    /// TODO: add read pairs with one shadow read to the alt read pool
+
+    /// high-quality spanning support relies on read1 and read2 mapping well:
+    bool isFragEvaluated(false);
+
+    const bool isPairUsable = ((fragev.read1.isScanned && fragev.read2.isScanned) &&
+                               (fragev.read1.isAnchored || fragev.read2.isAnchored));
+
+    if (isPairUsable)
+    {
+        /// only add to the likelihood if the fragment "supports" at least one allele:
+        if ( fragev.isAnySpanningPairSupport() )
+        {
+            if (! isSmallSV)
+            {
+                const bool isSemiMapped(! (fragev.read1.isAnchored && fragev.read2.isAnchored));
+                const double spanPower( isSemiMapped ?  semiMappedPower : 1.);
+
+                incrementSpanningPairAlleleLnLhood(chimeraProb, fragev.ref, spanPower, refLnLhoodSet.fragPair);
+                incrementSpanningPairAlleleLnLhood(chimeraProb, fragev.alt, spanPower, altLnLhoodSet.fragPair);
+                isFragEvaluated=true;
+            }
+        }
+    }
+
+    /// split support is less dependent on mapping quality of the individual read, because
+    /// we're potentially relying on shadow reads recovered from the unmapped state
+    isRead1Evaluated = true;
+    isRead2Evaluated = true;
+#ifdef DEBUG_SCORE
+    log_os << __FUNCTION__ << ": starting read1 split\n";
+#endif
+    incrementSplitReadLhood(fragev, true,  refLnLhoodSet.read1Split, altLnLhoodSet.read1Split, isRead1Evaluated);
+#ifdef DEBUG_SCORE
+    log_os << __FUNCTION__ << ": starting read2 split\n";
+#endif
+    incrementSplitReadLhood(fragev, false, refLnLhoodSet.read2Split, altLnLhoodSet.read2Split, isRead2Evaluated);
+
+#ifdef DEBUG_SCORE
+    log_os << __FUNCTION__ << ": iseval frag/read1/read2: " << isFragEvaluated << " " << isRead1Evaluated << " " << isRead1Evaluated << "\n";
+#endif
+    return (isFragEvaluated || isRead1Evaluated || isRead2Evaluated);
+}
+
+
+
+/// score diploid germline specific components:
+static
+void
+addDiploidLoglhood(
+    const bool isSmallSV,
+    const SVEvidence::evidenceTrack_t& sampleEvidence,
+    boost::array<double,DIPLOID_GT::SIZE>& loglhood)
+{
+    BOOST_FOREACH(const SVEvidence::evidenceTrack_t::value_type& val, sampleEvidence)
+    {
+        const SVFragmentEvidence& fragev(val.second);
+
+        AlleleLnLhood refLnLhoodSet, altLnLhoodSet;
+        bool isRead1Evaluated(true);
+        bool isRead2Evaluated(true);
+
+        /// TODO: set this from graph data:
+        ///
+        /// put some more thought into this -- is this P (spurious | any old read) or P( spurious | chimera ) ??
+        /// it seems like it should be the latter in the usages that really matter.
+        ///
+        static const ProbSet chimeraProb(1e-3);
+
+        /// don't use semi-mapped reads for germline calling:
+        static const double semiMappedPower(0.);
+
+        if (! getRefAltFromFrag(isSmallSV, semiMappedPower, chimeraProb, fragev,
+                                refLnLhoodSet, altLnLhoodSet, isRead1Evaluated, isRead2Evaluated))
+        {
+            // continue if this fragment was not evaluated for pair or split support for either allele:
+            continue;
+        }
+
+        for (unsigned gt(0); gt<DIPLOID_GT::SIZE; ++gt)
+        {
+            using namespace DIPLOID_GT;
+
+#ifdef DEBUG_SCORE
+            log_os << __FUNCTION__ << ": starting gt: " << gt << " " << label(gt) << "\n";
+#endif
+
+            const index_t gtid(static_cast<const index_t>(gt));
+            const double refLnFragLhood(getFragLnLhood(refLnLhoodSet, isRead1Evaluated, isRead2Evaluated));
+#ifdef DEBUG_SCORE
+            log_os << __FUNCTION__ << ": refLnFragLhood: " << refLnFragLhood << "\n";
+#endif
+            const double altLnFragLhood(getFragLnLhood(altLnLhoodSet, isRead1Evaluated, isRead2Evaluated));
+#ifdef DEBUG_SCORE
+            log_os << __FUNCTION__ << ": altLnFragLhood: " << altLnFragLhood << "\n";
+#endif
+            const double refLnLhood(refLnFragLhood + altLnCompFraction(gtid));
+            const double altLnLhood(altLnFragLhood + altLnFraction(gtid));
+            loglhood[gt] += log_sum(refLnLhood, altLnLhood);
+
+#ifdef DEBUG_SCORE
+            log_os << __FUNCTION__ << ": gt/fragref/ref/fragalt/alt: "
+                   << label(gt)
+                   << " " << refLnFragLhood
+                   << " " << refLnLhood
+                   << " " << altLnFragLhood
+                   << " " << altLnLhood
+                   << "\n";
+#endif
+        }
+    }
+}
+
 
 
 
@@ -586,132 +753,38 @@ scoreDiploidSV(
     const CallOptionsDiploid& diploidOpt,
     const CallOptionsDiploidDeriv& diploidDopt,
     const SVCandidate& sv,
-    const bool isSmallAssembler,
+    const bool isSmallSV,
     const ChromDepthFilterUtil& dFilter,
     const SVEvidence& evidence,
     SVScoreInfo& baseInfo,
     SVScoreInfoDiploid& diploidInfo)
 {
-#ifdef DEBUG_SCORE
-    static const std::string logtag("scoreDiploidSV: ");
-#endif
-
-    /// TODO: set this from graph data:
-    ///
-    /// put some more thought into this -- is this P (spurious | any old read) or P( spurious | chimera ) ??
-    /// it seems like it should be the latter in the usages that really matter.
-    ///
-    static const ProbSet chimeraProb(1e-3);
-
     //
     // compute qualities
     //
     {
-        double loglhood[DIPLOID_GT::SIZE];
+        boost::array<double,DIPLOID_GT::SIZE> loglhood;
+        std::fill(loglhood.begin(),loglhood.end(),0);
+        addDiploidLoglhood(isSmallSV, evidence.normal, loglhood);
+
+        boost::array<double,DIPLOID_GT::SIZE> pprob;
         for (unsigned gt(0); gt<DIPLOID_GT::SIZE; ++gt)
         {
-            loglhood[gt] = 0.;
-        }
+            // TODO: fix from xchen to use log prior instead of prior
+            // swap this in once there's time to make any compensatory parameter adjustments
+            //pprob[gt] = loglhood[gt] + diploidDopt.logPrior[gt];
 
-        BOOST_FOREACH(const SVEvidence::evidenceTrack_t::value_type& val, evidence.normal)
-        {
-            const SVFragmentEvidence& fragev(val.second);
-
-            AlleleLnLhood refLnLhoodSet, altLnLhoodSet;
-
-#ifdef DEBUG_SCORE
-            log_os << logtag << "qname: " << val.first << " fragev: " << fragev << "\n";
-#endif
-
-            /// TODO: add read pairs with one shadow read to the alt read pool
-
-            /// high-quality spanning support relies on read1 and read2 mapping well:
-            bool isFragEvaluated(false);
-            if ( fragev.read1.isObservedAnchor() && fragev.read2.isObservedAnchor())
-            {
-                /// only add to the likelihood if the fragment "supports" at least one allele:
-                if ( fragev.isAnySpanningPairSupport() )
-                {
-                    bool isSmall(false);
-                    if (isSmallAssembler)
-                    {
-                        const int svSize(std::abs(sv.bp2.interval.range.center_pos() - sv.bp1.interval.range.center_pos()));
-                        isSmall=(svSize<minPairVariantSize);
-                    }
-
-                    if (! isSmall)
-                    {
-                        isFragEvaluated=true;
-                        incrementSpanningPairAlleleLnLhood(chimeraProb, fragev.ref, refLnLhoodSet.fragPair);
-                        incrementSpanningPairAlleleLnLhood(chimeraProb, fragev.alt, altLnLhoodSet.fragPair);
-                    }
-                }
-            }
-
-            /// split support is less dependent on mapping quality of the individual read, because
-            /// we're potentially relying on shadow reads recovered from the unmapped state
-            bool isRead1Evaluated(true);
-            bool isRead2Evaluated(true);
-#ifdef DEBUG_SCORE
-            log_os << logtag << "starting read1 split\n";
-#endif
-            incrementSplitReadLhood(fragev, true,  refLnLhoodSet.read1Split, altLnLhoodSet.read1Split, isRead1Evaluated);
-#ifdef DEBUG_SCORE
-            log_os << logtag << "starting read2 split\n";
-#endif
-            incrementSplitReadLhood(fragev, false, refLnLhoodSet.read2Split, altLnLhoodSet.read2Split, isRead2Evaluated);
-
-#ifdef DEBUG_SCORE
-            log_os << logtag << "iseval frag/read1/read2: " << isFragEvaluated << " " << isRead1Evaluated << " " << isRead1Evaluated << "\n";
-#endif
-            if (! (isFragEvaluated || isRead1Evaluated || isRead2Evaluated) ) continue;
-
-            for (unsigned gt(0); gt<DIPLOID_GT::SIZE; ++gt)
-            {
-                using namespace DIPLOID_GT;
-
-#ifdef DEBUG_SCORE
-                log_os << logtag << "starting gt: " << gt << " " << label(gt) << "\n";
-#endif
-
-                const index_t gtid(static_cast<const index_t>(gt));
-                const double refLnFragLhood(getFragLnLhood(refLnLhoodSet, isRead1Evaluated, isRead2Evaluated));
-#ifdef DEBUG_SCORE
-                log_os << logtag << "refLnFragLhood: " << refLnFragLhood << "\n";
-#endif
-                const double altLnFragLhood(getFragLnLhood(altLnLhoodSet, isRead1Evaluated, isRead2Evaluated));
-#ifdef DEBUG_SCORE
-                log_os << logtag << "altLnFragLhood: " << altLnFragLhood << "\n";
-#endif
-                const double refLnLhood(refLnFragLhood + altLnCompFraction(gtid));
-                const double altLnLhood(altLnFragLhood + altLnFraction(gtid));
-                loglhood[gt] += log_sum(refLnLhood, altLnLhood);
-
-#ifdef DEBUG_SCORE
-                log_os << logtag << "gt/fragref/ref/fragalt/alt: "
-                       << label(gt)
-                       << " " << refLnFragLhood
-                       << " " << refLnLhood
-                       << " " << altLnFragLhood
-                       << " " << altLnLhood
-                       << "\n";
-#endif
-            }
-        }
-
-        double pprob[DIPLOID_GT::SIZE];
-        for (unsigned gt(0); gt<DIPLOID_GT::SIZE; ++gt)
-        {
+            // this version is wrong, it uses the prior without the log, see above:
             pprob[gt] = loglhood[gt] + diploidDopt.prior[gt];
         }
 
         unsigned maxGt(0);
-        normalize_ln_distro(pprob, pprob+DIPLOID_GT::SIZE, maxGt);
+        normalize_ln_distro(pprob.begin(), pprob.end(), maxGt);
 
 #ifdef DEBUG_SCORE
         for (unsigned gt(0); gt<DIPLOID_GT::SIZE; ++gt)
         {
-            log_os << logtag << "gt/lhood/prior/pprob: "
+            log_os << __FUNCTION__ << ": gt/lhood/prior/pprob: "
                    << DIPLOID_GT::label(gt)
                    << " " << loglhood[gt]
                    << " " << diploidDopt.prior[gt]
@@ -722,7 +795,7 @@ scoreDiploidSV(
 
         diploidInfo.gt=static_cast<DIPLOID_GT::index_t>(maxGt);
         diploidInfo.altScore=error_prob_to_qphred(pprob[DIPLOID_GT::REF]);
-        diploidInfo.gtScore=error_prob_to_qphred(prob_comp(pprob,pprob+DIPLOID_GT::SIZE, diploidInfo.gt));
+        diploidInfo.gtScore=error_prob_to_qphred(prob_comp(pprob.begin(),pprob.end(), diploidInfo.gt));
     }
 
 
@@ -744,7 +817,7 @@ scoreDiploidSV(
             }
         }
 
-        if (diploidInfo.gtScore < diploidOpt.minGTScoreFilter)
+        if (diploidInfo.gtScore < diploidOpt.minPassGTScore)
         {
             diploidInfo.filters.insert(diploidOpt.minGTFilterLabel);
         }
@@ -763,24 +836,271 @@ scoreDiploidSV(
 
 
 
+static
+unsigned
+getSpanningPairCount(
+    const SVSampleAlleleInfo& allele,
+    const bool isSmallSV,
+    const bool isPermissive)
+{
+    if (isSmallSV) return 0;
+    if (isPermissive) return allele.confidentSemiMappedSpanningPairCount;
+    else              return allele.confidentSpanningPairCount;
+}
+
+
+
+static
+unsigned
+getSupportCount(
+    const SVSampleAlleleInfo& allele,
+    const bool isSmallSV,
+    const bool isPermissive)
+{
+    return allele.confidentSplitReadCount + getSpanningPairCount(allele, isSmallSV, isPermissive);
+}
+
+
+
+static
+double
+estimateSomaticMutationFreq(
+    const SVScoreInfo& baseInfo,
+    const bool isSmallSV,
+    const bool isPermissive)
+{
+    const unsigned altCounts = getSupportCount(baseInfo.tumor.alt, isSmallSV, isPermissive);
+    const unsigned refCounts = getSupportCount(baseInfo.tumor.ref, isSmallSV, isPermissive);
+    if ((altCounts + refCounts) == 0) return 0;
+    return static_cast<double>(altCounts) / static_cast<double>(altCounts + refCounts);
+}
+
+
+
+static
+double
+estimateNoiseMutationFreq(
+    const SVScoreInfo& baseInfo,
+    const bool isSmallSV,
+    const bool isPermissive)
+{
+    const unsigned normalAltCounts = getSupportCount(baseInfo.normal.alt, isSmallSV, isPermissive);
+    const unsigned normalRefCounts = getSupportCount(baseInfo.normal.ref, isSmallSV, isPermissive);
+    const unsigned tumorAltCounts = getSupportCount(baseInfo.tumor.alt, isSmallSV, isPermissive);
+    const unsigned tumorRefCounts = getSupportCount(baseInfo.tumor.ref, isSmallSV, isPermissive);
+
+    const unsigned altCounts(normalAltCounts + tumorAltCounts);
+    const unsigned refCounts(normalRefCounts + tumorRefCounts);
+
+    if ((altCounts + refCounts) == 0) return 0;
+    return static_cast<double>(altCounts) / static_cast<double>(altCounts + refCounts);
+}
+
+
+
+static
+void
+computeSomaticSampleLoghood(
+    const bool isSmallSV,
+    const SVEvidence::evidenceTrack_t& evidenceTrack,
+    const double somaticMutationFreq,
+    const double noiseMutationFreq,
+    const double isPermissive,
+    boost::array<double,SOMATIC_GT::SIZE>& loglhood)
+{
+#if 0
+#ifdef DEBUG_SOMATIC_SCORE
+    static const std::string logtag("somaticLikelihood: ");
+
+    const bool isImprecise(sv.isImprecise());
+    const bool isBp1First(sv.bp1.interval.range.begin_pos()<=sv.bp2.interval.range.begin_pos());
+
+    const SVBreakend& bpA(isBp1First ? sv.bp1 : sv.bp2);
+    const known_pos_range2& bpArange(bpA.interval.range);
+    pos_t pos(bpArange.center_pos()+1);
+    if (! isImprecise)
+        pos = bpArange.begin_pos()+1;
+#endif
+#endif
+
+    /// TODO: find a better way to set this number from training data:
+    static const ProbSet chimeraProb(1e-4);
+
+    // semi-mapped reads make a partial contribution in tier1, and a full contribution in tier2:
+    const double semiMappedPower( isPermissive ? 1. : 0. );
+
+    BOOST_FOREACH(const SVEvidence::evidenceTrack_t::value_type& val, evidenceTrack)
+    {
+        const SVFragmentEvidence& fragev(val.second);
+
+        AlleleLnLhood refLnLhoodSet, altLnLhoodSet;
+        bool isRead1Evaluated(true);
+        bool isRead2Evaluated(true);
+
+        if (! getRefAltFromFrag(isSmallSV, semiMappedPower, chimeraProb, fragev,
+                                refLnLhoodSet, altLnLhoodSet, isRead1Evaluated, isRead2Evaluated))
+        {
+            // continue if this fragment was not evaluated for pair or split support for either allele:
+            continue;
+        }
+
+        for (unsigned gt(0); gt<SOMATIC_GT::SIZE; ++gt)
+        {
+            using namespace SOMATIC_GT;
+
+#ifdef DEBUG_SCORE
+            log_os << __FUNCTION__ << ": starting gt: " << gt << " " << label(gt) << "\n";
+#endif
+
+            const index_t gtid(static_cast<const index_t>(gt));
+
+            const double refLnFragLhood(getFragLnLhood(refLnLhoodSet, isRead1Evaluated, isRead2Evaluated));
+#ifdef DEBUG_SCORE
+            log_os << __FUNCTION__ << ": refLnFragLhood: " << refLnFragLhood << "\n";
+#endif
+            const double altLnFragLhood(getFragLnLhood(altLnLhoodSet, isRead1Evaluated, isRead2Evaluated));
+#ifdef DEBUG_SCORE
+            log_os << __FUNCTION__ << ": altLnFragLhood: " << altLnFragLhood << "\n";
+#endif
+
+            // update likelihood with Pr[allele | G]
+            const double refLnLhood = refLnFragLhood + altLnCompFraction(gtid, somaticMutationFreq, noiseMutationFreq);
+            const double altLnLhood = altLnFragLhood + altLnFraction(gtid, somaticMutationFreq, noiseMutationFreq);
+
+            loglhood[gt] += log_sum(refLnLhood, altLnLhood);
+        }
+    }
+}
+
+
+
 /// score somatic specific components:
 static
 void
 scoreSomaticSV(
     const CallOptionsSomatic& somaticOpt,
+    const CallOptionsSomaticDeriv& somaticDopt,
     const SVCandidate& sv,
-    const bool isSmallAssembler,
+    const bool isSmallSV,
     const ChromDepthFilterUtil& dFilter,
-    SVScoreInfo& baseInfo,
+    const SVEvidence& evidence,
+    const SVScoreInfo& baseInfo,
     SVScoreInfoSomatic& somaticInfo)
 {
     //
-    // compute qualities
+    // compute somatic score
     //
+
+    // somatic score is computed at a high stringency date tier (1) and low stringency tier (2), the min value is
+    // kept as the final reported quality:
+    static const unsigned tierCount(2);
+    double tierScore[tierCount] = { 0. , 0. };
+
+    const float largeNoiseWeight(largeNoiseSVPriorWeight(sv));
+
+    for (unsigned tierIndex(0); tierIndex<tierCount; ++tierIndex)
+    {
+        const bool isPermissive(tierIndex != 0);
+
+        boost::array<double,SOMATIC_GT::SIZE> normalSomaticLhood;
+        boost::array<double,SOMATIC_GT::SIZE> tumorSomaticLhood;
+        std::fill(normalSomaticLhood.begin(),normalSomaticLhood.end(),0);
+        std::fill(tumorSomaticLhood.begin(),tumorSomaticLhood.end(),0);
+
+        // estimate the somatic mutation rate using alternate allele freq from the tumor sample
+        const double somaticMutationFreq = estimateSomaticMutationFreq(baseInfo, isSmallSV, isPermissive);
+
+        // estimate the noise mutation rate using alternate allele freq from the tumor and normal samples
+        const double noiseMutationFreq = estimateNoiseMutationFreq(baseInfo, isSmallSV, isPermissive);
+
+#ifdef DEBUG_SOMATIC_SCORE
+        log_os << __FUNCTION__ << ": somaticMutationFrequency: " << somaticMutationFreq << "\n";
+        log_os << __FUNCTION__ << ": noiseMutationFrequency: " << noiseMutationFreq << "\n";
+#endif
+
+        // compute likelihood for the fragments from the tumor sample
+        computeSomaticSampleLoghood(isSmallSV, evidence.tumor, somaticMutationFreq, noiseMutationFreq, isPermissive, tumorSomaticLhood);
+        // compute likelihood for the fragments from the normal sample
+        computeSomaticSampleLoghood(isSmallSV, evidence.normal, 0, noiseMutationFreq, isPermissive, normalSomaticLhood);
+
+        boost::array<double,SOMATIC_GT::SIZE> somaticPprob;
+        for (unsigned gt(0); gt<SOMATIC_GT::SIZE; ++gt)
+        {
+            somaticPprob[gt] = tumorSomaticLhood[gt] + normalSomaticLhood[gt] + somaticDopt.logPrior(gt,largeNoiseWeight);
+        }
+
+        {
+            unsigned maxGt(0);
+            normalize_ln_distro(somaticPprob.begin(), somaticPprob.end(), maxGt);
+        }
+
+        // independently estimate diploid genotype:
+        boost::array<double,DIPLOID_GT::SIZE> normalLhood;
+        std::fill(normalLhood.begin(),normalLhood.end(),0);
+        addDiploidLoglhood(isSmallSV, evidence.normal, normalLhood);
+
+        boost::array<double,DIPLOID_GT::SIZE> normalPprob;
+        for (unsigned gt(0); gt<DIPLOID_GT::SIZE; ++gt)
+        {
+            normalPprob[gt] = normalLhood[gt]; // uniform prior for now....
+        }
+
+        {
+            unsigned maxGt(0);
+            normalize_ln_distro(normalPprob.begin(), normalPprob.end(), maxGt);
+        }
+
+#ifdef DEBUG_SOMATIC_SCORE
+        for (unsigned gt(0); gt<SOMATIC_GT::SIZE; ++gt)
+        {
+            log_os << __FUNCTION__ << ": gt/lhood/prior/somaticPprob for tumor sample: "
+                   << SOMATIC_GT::label(gt)
+                   << " " << somaticLhood[gt]
+                   << " " << somaticDopt.prior[gt]
+                   << " " << somaticPprob[gt]
+                   << "\n";
+        }
+
+        for (unsigned gt(0); gt<DIPLOID_GT::SIZE; ++gt)
+        {
+            log_os << __FUNCTION__ << ": diploid gt/lhood: "
+                   << DIPLOID_GT::label(gt)
+                   << " " << normalLhod[gt]
+                   << "\n";
+        }
+#endif
+
+        const double nonsomaticProb(prob_comp(somaticPprob.begin(), somaticPprob.end(), SOMATIC_GT::SOM));
+        const double nonrefProb(prob_comp(normalPprob.begin(), normalPprob.end(), DIPLOID_GT::REF));
+
+        // not (somatic AND normal ref):
+        // (1-(1-a)(1-b)) -> a+b-(ab)
+        const double nonsomatic_ref_prob(nonsomaticProb+nonrefProb-(nonsomaticProb*nonrefProb));
+
+        tierScore[tierIndex]=error_prob_to_qphred(nonsomatic_ref_prob);
+
+#ifdef DEBUG_SOMATIC_SCORE
+        log_os << __FUNCTION__ << ": tier: " << tierIndex << " somatic score: " << tierScore[tierIndex] << "\n";
+#endif
+
+        // don't bother with tier2 if tier1 is too low:
+        if (tierScore[tierIndex] <= 0.) break;
+    }
+
+    somaticInfo.somaticScore=std::min(tierScore[0],tierScore[1]);
+
+    somaticInfo.somaticScoreTier = 0;
+    if (tierScore[1] > tierScore[0])
+    {
+        somaticInfo.somaticScoreTier = 1;
+    }
+
+    // original threshold-based score logic:
+#ifdef COUNT_SCORE
     {
         // don't use pair evidence for small variants:
         bool isSmall(false);
-        if (isSmallAssembler)
+        if (isSmallSV)
         {
             const int svSize(std::abs(sv.bp2.interval.range.center_pos() - sv.bp1.interval.range.center_pos()));
             isSmall=(svSize<minPairVariantSize);
@@ -851,11 +1171,12 @@ scoreSomaticSV(
 
         if (isNonzeroSomaticQuality) somaticInfo.somaticScore=60;
     }
-
+#endif
 
     //
     // apply filters
     //
+    if (somaticInfo.somaticScore >= somaticOpt.minOutputSomaticScore)
     {
         if (dFilter.isMaxDepthFilter())
         {
@@ -868,6 +1189,11 @@ scoreSomaticSV(
             {
                 somaticInfo.filters.insert(somaticOpt.maxDepthFilterLabel);
             }
+        }
+
+        if (somaticInfo.somaticScore < somaticOpt.minPassSomaticScore)
+        {
+            somaticInfo.filters.insert(somaticOpt.minSomaticScoreLabel);
         }
 
         const bool isMQ0FilterSize(isSVBelowMinSize(sv,1000));
@@ -901,12 +1227,13 @@ scoreSV(
 
     // score components specific to diploid-germline model:
     const bool isSmallAssembler(! assemblyData.isSpanning);
-    scoreDiploidSV(_diploidOpt, _diploidDopt, sv, isSmallAssembler, _dFilterDiploid, evidence, modelScoreInfo.base, modelScoreInfo.diploid);
+    const bool isSmallSV(isTreatAsSmallSV(sv,isSmallAssembler));
+    scoreDiploidSV(_diploidOpt, _diploidDopt, sv, isSmallSV, _dFilterDiploid, evidence, modelScoreInfo.base, modelScoreInfo.diploid);
 
     // score components specific to somatic model:
     if (isSomatic)
     {
-        scoreSomaticSV(_somaticOpt, sv, isSmallAssembler, _dFilterSomatic, modelScoreInfo.base, modelScoreInfo.somatic);
+        scoreSomaticSV(_somaticOpt, _somaticDopt, sv, isSmallSV, _dFilterSomatic, evidence, modelScoreInfo.base, modelScoreInfo.somatic);
     }
 }
 

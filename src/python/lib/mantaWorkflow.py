@@ -125,7 +125,6 @@ def runDepth(self,taskPrefix="",dependencies=None) :
     estimate chrom depth
     """
 
-
     bamFile=""
     if len(self.params.normalBamList) :
         bamFile = self.params.normalBamList[0]
@@ -136,7 +135,7 @@ def runDepth(self,taskPrefix="",dependencies=None) :
 
 
     cmd  = "%s -E %s" % (sys.executable, self.params.mantaChromDepth)
-    cmd += " --bam %s" % (bamFile)
+    cmd += " --bam '%s'" % (bamFile)
     cmd += " > %s" % (self.paths.getChromDepth())
 
     nextStepWait = set()
@@ -260,8 +259,12 @@ def runHyGen(self, taskPrefix="", dependencies=None) :
         hygenCmd.extend(["--ref",self.params.referenceFasta])
         hygenCmd.extend(["--candidate-output-file", candidateVcfPaths[-1]])
         hygenCmd.extend(["--diploid-output-file", diploidVcfPaths[-1]])
+        hygenCmd.extend(["--min-qual-score", self.params.minDiploidVariantScore])
+        hygenCmd.extend(["--min-pass-gt-score", self.params.minPassGTScore])
         if isSomatic :
             hygenCmd.extend(["--somatic-output-file", somaticVcfPaths[-1]])
+            hygenCmd.extend(["--min-somatic-score", self.params.minSomaticScore])
+            hygenCmd.extend(["--min-pass-somatic-score", self.params.minPassSomaticScore])
 
         if self.params.isHighDepthFilter :
             hygenCmd.extend(["--chrom-depth", self.paths.getChromDepth()])
