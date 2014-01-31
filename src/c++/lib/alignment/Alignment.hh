@@ -52,7 +52,8 @@ struct AlignState
         DELETE,
         INSERT,
         JUMP,
-        SIZE
+        SIZE,
+        SPLICE
     };
 
     static
@@ -69,6 +70,8 @@ struct AlignState
             return "INSERT";
         case JUMP:
             return "JUMP";
+        case SPLICE:
+            return "SPLICE";
         default:
             return "UNKNOWN";
         }

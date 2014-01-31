@@ -85,6 +85,7 @@ align(
         val.del = badVal;
         val.ins = badVal;
         val.jump = badVal;
+        val.intron = badVal;
     }
 
     BackTrace<ScoreType> bt;
@@ -102,6 +103,7 @@ align(
                 val.del = badVal;
                 val.ins = badVal;
                 val.jump = badVal;
+                val.intron = badVal;
             }
 
             unsigned queryIndex(0);
@@ -117,6 +119,16 @@ align(
                                         sval.match,
                                         sval.del,
                                         sval.ins);
+                    // Only can leave the intron (splice) state if the last two
+                    // bases of the intron match the motif
+                    if (*(ref1Iter-2)=='A' && *(ref1Iter-1)=='G')
+                    {
+                        if (headScore.match < sval.intron)
+                        {
+                            headScore.match = sval.intron;
+                            headPtr.match = AlignState::SPLICE;
+                        }
+                    }
 
                     headScore.match += ((*queryIter==*ref1Iter) ? scores.match : scores.mismatch);
                 }
@@ -128,7 +140,7 @@ align(
                                       headScore.del,
                                       sval.match + scores.open,
                                       sval.del,
-                                      sval.ins);
+                                      sval.ins + scores.open);
 
                     headScore.del += scores.extend;
                     if (0==queryIndex) headScore.del += badVal;
@@ -140,13 +152,28 @@ align(
                     headPtr.ins = this->max3(
                                       headScore.ins,
                                       sval.match + scores.open,
-                                      sval.del,
+                                      sval.del + scores.open,
                                       sval.ins);
 
                     headScore.ins += scores.extend;
                     if (0==queryIndex) headScore.ins += badVal;
                 }
-
+                // update intron / splice
+                {
+                    const ScoreVal& sval((*prevSV)[queryIndex+1]);
+                    headPtr.intron = AlignState::SPLICE;
+                    headScore.intron = sval.intron;
+                    // Only can enter the intron (splice) state if the first two
+                    // bases of the intron match the motif
+                    if (*(ref1Iter)=='G' && *(ref1Iter+1)=='T')
+                    {
+                        if (sval.match + scores.intronOpen > sval.intron)
+                        {
+                            headScore.intron = sval.match + scores.intronOpen;
+                            headPtr.intron = AlignState::MATCH;
+                        }
+                    }
+                }
                 // update jump
                 {
                     const ScoreVal& sval((*prevSV)[queryIndex+1]);
@@ -160,8 +187,9 @@ align(
 
 #ifdef ALN_DEBUG
                 log_os << "queryIdx refIdx ref1Idx: " << queryIndex+1 << " " << ref1Index+1 << " " << ref1Index+1 << "\n";
-                log_os << headScore.match << ":" << headScore.del << ":" << headScore.ins << ":" << headScore.jump << "/"
+                log_os << headScore.match << ":" << headScore.del << ":" << headScore.ins << ":" << headScore.jump << ":" << headScore.intron << "/"
                        << static_cast<int>(headPtr.match) << static_cast<int>(headPtr.del) << static_cast<int>(headPtr.ins) << static_cast<int>(headPtr.jump) << "\n";
+                log_os << "Q:" << *queryIter << " R:" << *ref1Iter << "\n";
 #endif
             }
 #ifdef ALN_DEBUG
@@ -201,6 +229,7 @@ align(
             val.match = queryIndex * scores.offEdge;
             val.del = badVal;
             val.ins = badVal;
+            val.intron = badVal;
             //val.jump = badVal; // preserve jump setting from last iteration of ref1
         }
 
@@ -216,6 +245,7 @@ align(
                 val.del = badVal;
                 val.ins = badVal;
                 val.jump = badVal;
+                val.intron = badVal;
             }
 
             unsigned queryIndex(0);
@@ -232,6 +262,16 @@ align(
                                         sval.del,
                                         sval.ins,
                                         sval.jump);
+                    // Only can leave the intron (splice) state if the last two
+                    // bases of the intron match the motif
+                    if (*(ref2Iter-2)=='A' && *(ref2Iter-1)=='G')
+                    {
+                        if (headScore.match < sval.intron)
+                        {
+                            headScore.match = sval.intron;
+                            headPtr.match = AlignState::SPLICE;
+                        }
+                    }
 
                     headScore.match += ((*queryIter==*ref2Iter) ? scores.match : scores.mismatch);
                 }
@@ -243,7 +283,7 @@ align(
                                       headScore.del,
                                       sval.match + scores.open,
                                       sval.del,
-                                      sval.ins);
+                                      sval.ins + scores.open);
 
                     headScore.del += scores.extend;
                 }
@@ -254,13 +294,28 @@ align(
                     headPtr.ins = max4(
                                       headScore.ins,
                                       sval.match + scores.open,
-                                      sval.del,
+                                      sval.del + scores.open,
                                       sval.ins,
                                       sval.jump); // jump->ins moves get a pass on the gap-open penalty, to support mirco-insertions
 
                     headScore.ins += scores.extend;
                 }
-
+                // update intron
+                {
+                    const ScoreVal& sval((*prevSV)[queryIndex+1]);
+                    headPtr.intron = AlignState::SPLICE;
+                    headScore.intron = sval.intron;
+                    // Only can enter the intron (splice) state if the first two
+                    // bases of the intron match the motif
+                    if (*(ref2Iter)=='G' && *(ref2Iter+1)=='T')
+                    {
+                        if (sval.match + scores.intronOpen > sval.intron)
+                        {
+                            headScore.intron = sval.match + scores.intronOpen;
+                            headPtr.intron = AlignState::MATCH;
+                        }
+                    }
+                }
                 // update jump
                 {
                     const ScoreVal& sval((*prevSV)[queryIndex+1]);
@@ -357,6 +412,11 @@ align(
         else if (bt.state==AlignState::DELETE)
         {
             AlignerUtil::updatePath(apath,ps,ALIGNPATH::DELETE);
+            bt.refBegin--;
+        }
+        else if (bt.state==AlignState::SPLICE)
+        {
+            AlignerUtil::updatePath(apath,ps,ALIGNPATH::SKIP);
             bt.refBegin--;
         }
         else if (bt.state==AlignState::INSERT)

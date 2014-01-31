@@ -33,7 +33,7 @@ struct SVRefinerOptions
     SVRefinerOptions() :
         smallSVAlignScores(2, -8, -12, 0, -1),
         largeInsertAlignScores(2, -8, -12, -1, -1),
-        spanningAlignScores(2, -8, -12, -1, -1),
+        spanningAlignScores(2, -8, -12, -1, -15, -1, 0),
         jumpScore(-25)
     {
         spanningAssembleOpt.minContigLength=75; ///< For breakend-spanning assemblies we require a larger contig than for small-variant assemblies

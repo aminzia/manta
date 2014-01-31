@@ -29,7 +29,7 @@
 
 #include <iostream>
 
-//#define DEBUG_REFINER
+#define DEBUG_REFINER
 
 
 #ifdef DEBUG_REFINER
@@ -791,10 +791,10 @@ getJumpAssembly(
 
     // how much additional reference sequence should we extract from around
     // each side of the breakend region for alignment purposes?
-    static const pos_t extraRefEdgeSize(250);
+    static const pos_t extraRefEdgeSize(2000);
 
     // how much reference should we additionally extract for split read alignment, but not for variant-discovery alignment?
-    static const pos_t extraRefSplitSize(100);
+    static const pos_t extraRefSplitSize(250);
 
     static const pos_t extraRefSize(extraRefEdgeSize+extraRefSplitSize);
 
@@ -978,9 +978,13 @@ getJumpAssembly(
         const bool isAlignment1Good(alignment.align1.isAligned() && (apath_ref_length(alignment.align1.apath) >= minAlignRefSpan));
         const bool isAlignment2Good(alignment.align2.isAligned() && (apath_ref_length(alignment.align2.apath) >= minAlignRefSpan));
         const bool isAlignmentGood(isAlignment1Good && isAlignment2Good);
-
+#ifdef DEBUG_REFINER
+        log_os << logtag << "Checking contig aln: " << contigIndex << "\n";
+#endif
         if (! isAlignmentGood) continue;
-
+#ifdef DEBUG_REFINER
+        log_os << logtag << "contig okay: " << contigIndex << "\n";
+#endif
         if ((! isHighScore) || (alignment.score > assemblyData.spanningAlignments[highScoreIndex].score))
         {
             isHighScore = true;
@@ -989,6 +993,9 @@ getJumpAssembly(
     }
 
     if (! isHighScore) return;
+#ifdef DEBUG_REFINER
+        log_os << logtag << "high scoring contig: " << highScoreIndex << "\n";
+#endif
 
     // set any additional QC steps before deciding an alignment is usable:
 

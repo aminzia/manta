@@ -129,6 +129,7 @@ private:
         ScoreType ins;
         ScoreType del;
         ScoreType jump;
+        ScoreType intron;
     };
 
     struct PtrVal
@@ -146,16 +147,19 @@ private:
                 return del;
             case AlignState::JUMP:
                 return jump;
+            case AlignState::SPLICE:
+                return intron;
             default:
                 assert(false && "Unexpected Index Value");
                 return 0;
             }
         }
 
-        uint8_t match : 2;
-        uint8_t ins : 2;
-        uint8_t del : 2;
-        uint8_t jump : 2;
+        uint8_t match : 3;
+        uint8_t ins : 3;
+        uint8_t del : 3;
+        uint8_t jump : 3;
+        uint8_t intron : 3;
     };
 
     // add the matrices here to reduce allocations over many alignment calls:
