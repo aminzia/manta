@@ -1125,6 +1125,7 @@ getSmallSVAssembly(
 
     bool isHighScore(false);
     unsigned highScoreIndex(0);
+    Alignment highAlignment;
 
     std::vector<unsigned> largeInsertionCandidateIndex;
 
@@ -1201,11 +1202,13 @@ getSmallSVAssembly(
             }
         }
 
+#if 0
         /// Passed QC:
         if (alignment.score == alignment.score2)
         {
             std::cerr << "PEPPER: " << alignment << "\n";
         }
+#endif
 
         if (isSmallSVCandidate)
         {
@@ -1219,6 +1222,15 @@ getSmallSVAssembly(
 #endif
                 isHighScore = true;
                 highScoreIndex=contigIndex;
+
+                if(alignment.score == alignment.score2)
+                {
+                    highAlignment=alignment.align2;
+                }
+                else
+                {
+                    highAlignment.clear();
+                }
             }
         }
     }
@@ -1258,6 +1270,10 @@ getSmallSVAssembly(
             newSV.assemblyAlignIndex = assemblyData.bestAlignmentIndex;
             newSV.assemblySegmentIndex = segmentIndex;
             setSmallCandSV(assemblyData.bp1ref, bestContig.seq, bestAlign.align, segRange, newSV);
+            if (highAlignment.isAligned())
+            {
+                std::cerr << "PEPPER: " << highAlignment << " SV: " << newSV << "\n";
+            }
             segmentIndex++;
 
 #ifdef DEBUG_REFINER
