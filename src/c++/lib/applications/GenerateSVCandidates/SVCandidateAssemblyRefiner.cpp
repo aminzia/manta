@@ -1201,6 +1201,12 @@ getSmallSVAssembly(
             }
         }
 
+        /// Passed QC:
+        if (alignment.score == alignment.score2)
+        {
+            std::cerr << "PEPPER: " << alignment << "\n";
+        }
+
         if (isSmallSVCandidate)
         {
             // keep the highest scoring QC'd candidate:
