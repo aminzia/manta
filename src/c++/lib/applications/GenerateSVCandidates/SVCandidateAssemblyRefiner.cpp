@@ -728,7 +728,9 @@ SVCandidateAssemblyRefiner(
     _spanningAssembler(opt.scanOpt, opt.refineOpt.spanningAssembleOpt, opt.alignFileOpt, opt.statsFilename, opt.chromDepthFilename, header),
     _smallSVAligner(opt.refineOpt.smallSVAlignScores),
     _largeInsertAligner(opt.refineOpt.largeInsertAlignScores),
-    _spanningAligner(opt.refineOpt.spanningAlignScores, opt.refineOpt.jumpScore)
+    _spanningAligner(!opt.isRNA ? opt.refineOpt.spanningAlignScores
+                                : opt.refineOpt.RNAspanningAlignScores,
+                     opt.refineOpt.jumpScore)
 {}
 
 
@@ -738,7 +740,8 @@ SVCandidateAssemblyRefiner::
 getCandidateAssemblyData(
     const SVCandidate& sv,
     const SVCandidateSetData& /*svData*/,
-    SVCandidateAssemblyData& assemblyData) const
+    SVCandidateAssemblyData& assemblyData,
+    bool isRNA) const
 {
 #ifdef DEBUG_REFINER
     static const std::string logtag("getCandidateAssemblyData: ");
@@ -758,7 +761,7 @@ getCandidateAssemblyData(
         assemblyData.isCandidateSpanning=true;
 
         // this case assumes two suspected breakends with a direction to each, most common large scale SV case:
-        getJumpAssembly(sv, isFindLargeInsertions, assemblyData);
+        getJumpAssembly(sv, isFindLargeInsertions, assemblyData, isRNA);
     }
     else if (isComplexSV(sv))
     {
@@ -782,16 +785,18 @@ SVCandidateAssemblyRefiner::
 getJumpAssembly(
     const SVCandidate& sv,
     const bool isFindLargeInsertions,
-    SVCandidateAssemblyData& assemblyData) const
+    SVCandidateAssemblyData& assemblyData,
+    bool isRNA) const
 {
 #ifdef DEBUG_REFINER
     static const std::string logtag("getJumpAssembly: ");
     log_os << logtag << "START\n";
+    if (isRNA) { log_os << logtag << "RNA\n"; }
 #endif
 
     // how much additional reference sequence should we extract from around
     // each side of the breakend region for alignment purposes?
-    static const pos_t extraRefEdgeSize(2000);
+    static const pos_t extraRefEdgeSize(isRNA ? 5000 : 250);
 
     // how much reference should we additionally extract for split read alignment, but not for variant-discovery alignment?
     static const pos_t extraRefSplitSize(250);

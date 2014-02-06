@@ -178,7 +178,7 @@ struct SVWriter
 
         svScore.scoreSV(svData, assemblyData, sv, isSomatic, modelScoreInfo);
 
-        if (modelScoreInfo.diploid.altScore >= opt.diploidOpt.minOutputAltScore || true)
+        if (modelScoreInfo.diploid.altScore >= opt.diploidOpt.minOutputAltScore || opt.isRNA) // todo remove after adding RNA scoring
         {
             diploidWriter.writeSV(edge, svData, assemblyData, sv, modelScoreInfo);
         }
@@ -355,7 +355,7 @@ runGSC(
 
                 if (! opt.isSkipAssembly)
                 {
-                    svRefine.getCandidateAssemblyData(candidateSV, svData, assemblyData);
+                    svRefine.getCandidateAssemblyData(candidateSV, svData, assemblyData, opt.isRNA);
 
                     if (opt.isVerbose)
                     {

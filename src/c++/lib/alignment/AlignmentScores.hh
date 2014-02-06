@@ -17,6 +17,8 @@
 template <typename ScoreType>
 struct AlignmentScores
 {
+    static const ScoreType badVal = -10000;
+
     AlignmentScores(
         ScoreType initMatch,
         ScoreType initMismatch,
@@ -44,9 +46,9 @@ struct AlignmentScores
         mismatch(initMismatch),
         open(initOpen),
         extend(initExtend),
-        intronOpen(initOpen),
+        intronOpen(badVal),
         offEdge(initOffEdge),
-        intronOffEdge(initOffEdge)
+        intronOffEdge(badVal)
     {}
 
     const ScoreType match; ///< match score
@@ -55,5 +57,5 @@ struct AlignmentScores
     const ScoreType extend; ///< gap extend, gap of length N is scored (open + N * extend) (should be negative or zero)
     const ScoreType intronOpen; ///< gap open for introns (i.e. deletions starting with splice motif) (should be negative)
     const ScoreType offEdge; ///< score applied when query goes off the end of an edge (should be negative)
-    const ScoreType intronOffEdge; ///As offEdge but only of the last aligned bases match a splice motif (should be negative)
+    const ScoreType intronOffEdge; ///As offEdge but only of the last aligned bases match a splice motif (should be negative) todo: not implemented
 };
