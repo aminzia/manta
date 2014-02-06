@@ -191,18 +191,16 @@ updateSABreakend(
     SVBreakend& breakend)
 {
     // Need to use the match descriptors to determine if
-    //  we are upstream clipped or downstream clipped. We
-    //  also then need to use the strand. Below is the logic
+    // we are upstream clipped or downstream clipped.
+    // Below is the logic to convert these  to breakend candidates:
     //
-    // Upstream & +    => LEFT_OPEN
-    // Upstream & -    => RIGHT_OPEN
-    // DownStream & +  => RIGHT_OPEN
-    // DownStream & -  => LEFT_OPEN
+    // Upstream => LEFT_OPEN
+    // DownStream => RIGHT_OPEN
     //
 
     const bool isUpstream(isCigarUpstream(align.path));
 
-    if (isUpstream == align.is_fwd_strand)
+    if (isUpstream)
     {
         breakend.state = SVBreakendState::LEFT_OPEN;
     }
@@ -250,6 +248,7 @@ typedef std::map<std::string, int32_t> chromMap_t;
 static
 void
 getSACandidatesFromRead(
+    const ReadScannerOptions& opt,
     const ReadScannerDerivOptions& dopt,
     const bam_record& localRead,
     const SimpleAlignment& localAlign,
@@ -265,19 +264,15 @@ getSACandidatesFromRead(
         if (NULL == saStr) return;
 
         split_string(saStr, ';', saVec);
-        if (saVec[saVec.size() - 1].empty())
+        if ( (! saVec.empty()) && saVec.back().empty())
         {
             saVec.pop_back();
         }
     }
 
-    // For now we will only handle a single split alignment
-    //  In the future we will need to sort the SA tags by order on of segments on
-    //   the actual template.
-    //  We may also have to toss conflicting segments that map to two different areas,
-    //   or at least find some way of dealing with them.
-    //std::cerr << "At: '" << saStr << "', '" << localRead << "'" << std::endl;
-    //std::cerr << "Size: " << saVec.size() << std::endl;
+    // Only handle a single split alignment right now.
+    // In the future we could sort the SA tags by order on the template, possibly
+    // also removing segments that map to two different areas,
 
     if (saVec.size() > 1) return;
 
@@ -293,6 +288,10 @@ getSACandidatesFromRead(
 
         assert((saDat.size() == 6) && "Unexpected number of SA tag values");
 
+        /// filter split reads with low MAPQ:
+        const unsigned saMapq(illumina::blt_util::parse_unsigned_str(saDat[4]));
+        if (saMapq < opt.minMapq) continue;
+
         const chromMap_t::const_iterator ci(chromToIndex.find(saDat[0]));
         assert(ci != chromToIndex.end());
 
@@ -307,13 +306,6 @@ getSACandidatesFromRead(
         }
 
         cigar_to_apath(saDat[3].c_str(), remoteAlign.path);
-
-        /*std::cerr << "SA Values: "
-                  << ", " << saChr
-                  << ", " << saPos
-                  << ", " << saStrand
-                  << ", " << remotePath << '\n';
-        */
 
         // At this point we don't care about strand
         candidates.push_back(GetSplitSACandidate(dopt, localAlign, remoteAlign));
@@ -768,7 +760,7 @@ getSingleReadSVCandidates(
 #endif
 
     /// - process split/SA reads:
-    getSACandidatesFromRead(dopt, localRead, localAlign, chromToIndex,
+    getSACandidatesFromRead(opt, dopt, localRead, localAlign, chromToIndex,
                             candidates);
 #ifdef DEBUG_SCANNER
     log_os << logtag << " post-split read candidate_size: " << candidates.size() << "\n";
