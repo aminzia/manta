@@ -185,7 +185,7 @@ struct SVWriter
         else 
         {
 #ifdef DEBUG_GSV
-            log_os << logtag << "Filtering out candidate below min output alt score (" << opt.diploidOpt.minOutputAltScore << ") at scoring stage\n";
+            log_os << logtag << "Filtering out candidate below min output alt score (" << opt.diploidOpt.minOutputAltScore << ") at scoring stage. This score=" << modelScoreInfo.diploid.altScore  << "\n";
 #endif
             _truthTracker.reportOutcome(SVLog::LOW_ALT_SCORE);
         }
