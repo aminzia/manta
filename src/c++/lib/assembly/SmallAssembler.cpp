@@ -106,6 +106,7 @@ getEnd(const std::string& contig,
     else       return contig.substr(0,length);
 }
 
+#ifdef DEBUG_ASBL
 static
 void
 dumpHash(const str_uint_map_t& wordCount,
@@ -169,6 +170,7 @@ dumpHash(const str_uint_map_t& wordCount,
 	outDotFile.close();
 	outTxtFile.close();
 }
+#endif
 
 // Prototype of a DFS traversal
 static
