@@ -669,7 +669,7 @@ getJumpAssembly(
     log_os << logtag << "contigCount: " << contigCount << "\n";
     for (unsigned contigIndex(0); contigIndex<contigCount; ++contigIndex)
     {
-        const AssembledContig& contig(assemblyData.contigs[contigIndex]);
+        const Contig& contig(assemblyData.contigs[contigIndex]);
         log_os << logtag << "contigIndex: " << contigIndex << " contig: " << contig;
     }
 #endif
@@ -682,7 +682,7 @@ getJumpAssembly(
 
     for (unsigned contigIndex(0); contigIndex<contigCount; ++contigIndex)
     {
-        const AssembledContig& contig(assemblyData.contigs[contigIndex]);
+        const Contig& contig(assemblyData.contigs[contigIndex]);
 
 #ifdef DEBUG_REFINER
         log_os << logtag << "start aligning contigIndex: " << contigIndex << "\n";
@@ -762,7 +762,7 @@ getJumpAssembly(
         // process the alignment into information that's easily usable in the vcf output
         // (ie. breakends in reference coordinates)
 
-        const AssembledContig& bestContig(assemblyData.contigs[assemblyData.bestAlignmentIndex]);
+        const Contig& bestContig(assemblyData.contigs[assemblyData.bestAlignmentIndex]);
         const SVCandidateAssemblyData::JumpAlignmentResultType& bestAlign(assemblyData.spanningAlignments[assemblyData.bestAlignmentIndex]);
 
         // first get each alignment associated with the correct breakend:
@@ -854,7 +854,7 @@ getSmallSVAssembly(
     log_os << logtag << "contigCount: " << contigCount << '\n';
     for (unsigned contigIndex(0); contigIndex<contigCount; ++contigIndex)
     {
-        const AssembledContig& contig(assemblyData.contigs[contigIndex]);
+        const Contig& contig(assemblyData.contigs[contigIndex]);
         log_os << logtag << "contigIndex: " << contigIndex << " contig: " << contig;
     }
 #endif
@@ -868,7 +868,7 @@ getSmallSVAssembly(
 
     for (unsigned contigIndex(0); contigIndex<contigCount; ++contigIndex)
     {
-        const AssembledContig& contig(assemblyData.contigs[contigIndex]);
+        const Contig& contig(assemblyData.contigs[contigIndex]);
 
 #ifdef DEBUG_REFINER
         log_os << logtag << "start aligning contigIndex: " << contigIndex << '\n';
@@ -951,7 +951,7 @@ getSmallSVAssembly(
         // process the alignment into information that's easily usable in the vcf output
         // (ie. breakends in reference coordinates)
 
-        const AssembledContig& bestContig(assemblyData.contigs[assemblyData.bestAlignmentIndex]);
+        const Contig& bestContig(assemblyData.contigs[assemblyData.bestAlignmentIndex]);
         const SVCandidateAssemblyData::SmallAlignmentResultType& bestAlign(assemblyData.smallSVAlignments[assemblyData.bestAlignmentIndex]);
 
         const SVCandidateAssemblyData::CandidateSegmentSetType& candidateSegments(assemblyData.smallSVSegments[assemblyData.bestAlignmentIndex]);

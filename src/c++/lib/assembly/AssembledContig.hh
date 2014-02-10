@@ -27,21 +27,32 @@
 /// stores for each contig the sequence and the number of reads
 /// containing its seeding k-mer
 ///
-struct AssembledContig
-{
-    AssembledContig() : seedReadCount(0) {}
+struct Contig {
 
-    std::string seq; ///< contigsequence
+	Contig() :
+		seq(""),
+		avgCoverage(0),
+		numKmers(0),
+        seedReadCount(0)
+	{}
 
-    // reads used for assembly of contig <read_no,mapping position to contig>
-    //std::map<std::string,int> contigReads;
+	Contig(const Contig & c) :
+		seq(c.seq),
+		avgCoverage(c.avgCoverage),
+		numKmers(c.numKmers),
+        seedReadCount(c.seedReadCount)
+	{}
 
-    unsigned seedReadCount; ///< no of reads containing the seeding kmer
+	std::string seq;
+	float avgCoverage;
+	int numKmers;
+	unsigned seedReadCount;
 };
 
+typedef std::vector<Contig> Assembly;
 
-std::ostream& operator<<(std::ostream& os, const AssembledContig& contig);
+std::ostream& operator<<(std::ostream& os, const Contig& contig);
 
 
-typedef std::vector<AssembledContig> Assembly;
+//typedef std::vector<AssembledContig> Assembly;
 

@@ -23,7 +23,7 @@
 
 
 std::ostream&
-operator<<(std::ostream& os, const AssembledContig& contig)
+operator<<(std::ostream& os, const Contig& contig)
 {
     os << "CONTIG size: " << contig.seq.size()
        << " seedCount: " << contig.seedReadCount

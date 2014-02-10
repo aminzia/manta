@@ -50,26 +50,6 @@ static const std::string alphabet("ACGT");
 
 //static const unsigned MIN_KMER_FREQ = 1;
 
-struct DfsContig {
-
-	DfsContig() :
-		sequence(""),
-		avgCoverage(0),
-		numKmers(0)
-	{}
-
-	DfsContig(const DfsContig & c) :
-		sequence(c.sequence),
-		avgCoverage(c.avgCoverage),
-		numKmers(c.numKmers)
-	{}
-
-	std::string sequence;
-	float avgCoverage;
-	int numKmers;
-};
-
-
 
 /**
  * Adds base @p base to the end (isEnd is true) or start (otherwise) of the contig.
@@ -176,15 +156,15 @@ dumpHash(const str_uint_map_t& wordCount,
 static
 void
 doDFS(const str_uint_map_t& wordCount,
-	  const DfsContig& contigSoFar,
+	  const Contig& contigSoFar,
 	  const unsigned wordLength,
 	  str_bool_map_t& seenVertices,
-	  std::vector<DfsContig>& contigs) {
+	  std::vector<Contig>& contigs) {
 
 	// we walk only to the left
 	static const bool isEnd(true);
 
-	std::string tmp(getEnd(contigSoFar.sequence,wordLength-1,isEnd));
+	std::string tmp(getEnd(contigSoFar.seq,wordLength-1,isEnd));
 	bool neighbourFound(false);
 	BOOST_FOREACH(const char symbol, alphabet) {
 		const std::string overlap(addBase(tmp,symbol,isEnd));
@@ -199,8 +179,8 @@ doDFS(const str_uint_map_t& wordCount,
 	    if (ct != wordCount.end() && !seenVertices[overlap]) {
 	        seenVertices[overlap] = true;
 	        // copy contig sequence
-	    	DfsContig newCtg(contigSoFar);
-	     	newCtg.sequence += symbol;
+	    	Contig newCtg(contigSoFar);
+	     	newCtg.seq += symbol;
 	     	// update running average of coverage
 	     	newCtg.avgCoverage = (ct->second+newCtg.numKmers*newCtg.avgCoverage)/(newCtg.numKmers+1);
 	     	++newCtg.numKmers;
@@ -224,7 +204,7 @@ void
 initDFS(str_uint_map_t& wordCount,
 		const std::string& startVertex,
 		const unsigned wordLength,
-		std::vector<DfsContig>& contigs
+		std::vector<Contig>& contigs
 #ifdef DEBUG_ASBL
         ,const unsigned iteration
 #endif
@@ -254,8 +234,8 @@ initDFS(str_uint_map_t& wordCount,
 #endif
 
 	str_bool_map_t seenVertices;
-	DfsContig ctg;
-	ctg.sequence = startVertex;
+	Contig ctg;
+	ctg.seq = startVertex;
 	ctg.avgCoverage = 0;
 	doDFS(wordCount, ctg, wordLength, seenVertices, contigs);
 }
@@ -468,8 +448,8 @@ buildContigs(
     //walk(opt,maxWord,wordLength,wordCount,contig.seq);
     //walk(opt,firstWord,wordLength,wordCount,contig.seq);
 
-    typedef std::vector<DfsContig> AssembledSequence;
-    AssembledSequence contigSeq;
+
+    Assembly contigSeq;
     initDFS(wordCount,firstWord,wordLength,contigSeq
 #ifdef DEBUG_ASBL
     , iteration
@@ -487,42 +467,17 @@ buildContigs(
     // done with this now:
     wordCount.clear();
 
-
-/*#ifdef DEBUG_ASBL
-    log_os << logtag << " Assembled sequence="
-           << contig.seq << "\n"
-           << " length=" << contigSize << ". Input=" << readCount << " reads.\n";
-#endif*/
-
-    // increment number of reads containing the seeding kmer
-    /*for (unsigned readIndex(0); readIndex<readCount; ++readIndex)
-    {
-        const str_uint_map_t& readWordOffset(readWordOffsets[readIndex]);
-        if (readWordOffset.count(maxWord)) ++contig.seedReadCount;
-    }
-
-#ifdef DEBUG_ASBL
-    log_os << logtag << " final seeding reading count: " << contig.seedReadCount << "\n";
-#endif
-    if (contig.seedReadCount < opt.minSeedReads)
-    {
-#ifdef DEBUG_ASBL
-        log_os << "\t...which is below minSeedReadCount of " << opt.minSeedReads << " discarding.\n";
-#endif
-        return false;
-    }*/
-
-    for (AssembledSequence::const_iterator ctgIter = contigSeq.begin(); ctgIter != contigSeq.end(); ++ctgIter) 
+    for (Assembly::iterator ctgIter = contigSeq.begin(); ctgIter != contigSeq.end(); ++ctgIter)
     {
 
         // throw away short stuff
-        if (ctgIter->sequence.length() < 100) continue;
+        if (ctgIter->seq.length() < 100) continue;
 
-        AssembledContig contig;
-        contig.seq = ctgIter->sequence;
+        //AssembledContig contig;
+        //contig.seq = ctgIter->sequence;
 
         // finally -- set isUsed and decrement unusedReads
-        const unsigned contigSize(contig.seq.size());
+        const unsigned contigSize(ctgIter->seq.size());
         for (unsigned readIndex(0); readIndex<readCount; ++readIndex) 
         {
             const str_uint_map_t& readWordOffset(readWordOffsets[readIndex]);
@@ -533,7 +488,7 @@ buildContigs(
             // store all reads sharing k-mers of the current word length with the contig
             for (unsigned j(0); j<=(contigSize-wordLength); ++j) 
             {
-                const std::string word(contig.seq.substr(j,wordLength));
+                const std::string word(ctgIter->seq.substr(j,wordLength));
                 //cerr << "Testing word " << word << " " << readNum << "\n";
                 //cerr << "with counts : " << wordCount[word] << "\n";
                 if (readWordOffset.count(word))
@@ -544,12 +499,12 @@ buildContigs(
                     assert(unusedReads != 0);
                     --unusedReads;
 
-                    ++contig.seedReadCount;
+                    ++ctgIter->seedReadCount;
                     break;
                 }
             }
         }
-        finalContigs.push_back(contig);
+        finalContigs.push_back(*ctgIter);
     }
 
     // don't need this anymore:
