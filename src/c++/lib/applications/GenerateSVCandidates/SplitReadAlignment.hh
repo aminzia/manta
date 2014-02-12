@@ -1,7 +1,7 @@
 // -*- mode: c++; indent-tabs-mode: nil; -*-
 //
 // Manta
-// Copyright (c) 2013 Illumina, Inc.
+// Copyright (c) 2013-2014 Illumina, Inc.
 //
 // This software is provided under the terms and conditions of the
 // Illumina Open Source Software License 1.
@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "blt_util/known_pos_range2.hh"
 #include "blt_util/qscore_snp.hh"
 
 #include <stdint.h>
@@ -30,8 +31,10 @@ struct SRAlignmentInfo
     SRAlignmentInfo():
         alignPos(0),
         leftSize(0),
+        homSize(0),
         rightSize(0),
         leftMismatches(0),
+        homMismatches(0),
         rightMismatches(0),
         alignScore(0),
         alignLnLhood(0),
@@ -41,8 +44,10 @@ struct SRAlignmentInfo
 
     unsigned alignPos;
     unsigned leftSize;
+    unsigned homSize;
     unsigned rightSize;
     unsigned leftMismatches;
+    unsigned homMismatches;
     unsigned rightMismatches;
     unsigned alignScore;
     float alignLnLhood;
@@ -56,6 +61,7 @@ operator<<(std::ostream& os, const SRAlignmentInfo& info);
 
 
 ///
+/// \param[in] flankScoreSize the number of bases to score past the end of microhomology range
 ///
 /// \param[in] targetBpOffsetRange this is the range of the breakend (accounting for microhomology) in targetSeq coordinates
 ///
@@ -64,9 +70,10 @@ operator<<(std::ostream& os, const SRAlignmentInfo& info);
 ///
 void
 splitReadAligner(
+    const unsigned flankScoreSize,
     const std::string& querySeq,
     const qscore_snp& qualConvert,
     const uint8_t* queryQual,
     const std::string& targetSeq,
-    const unsigned targetBpBeginPos,
+    const known_pos_range2& targetBpOffsetRange,
     SRAlignmentInfo& alignment);

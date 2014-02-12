@@ -1,7 +1,7 @@
 // -*- mode: c++; indent-tabs-mode: nil; -*-
 //
 // Manta
-// Copyright (c) 2013 Illumina, Inc.
+// Copyright (c) 2013-2014 Illumina, Inc.
 //
 // This software is provided under the terms and conditions of the
 // Illumina Open Source Software License 1.
@@ -79,11 +79,13 @@ private:
     const bool _bp2ContigReversed;
 
 public:
-    /// all offsets correspond to the zero-indexed base immediately before the breakend on the fwd-strand
-    pos_t bp1ContigOffset;
-    pos_t bp2ContigOffset;
-    pos_t bp1RefOffset;
-    pos_t bp2RefOffset;
+    /// all offset range 'begin' values correspond to the zero-indexed base immediately before the breakend on the fwd-strand,
+    /// and 'end' values correspond to the zero-indexed base immediately before the breakend on the forward strand+microhomology range
+    /// In the absence of microhomology, begin and end should be equal.
+    known_pos_range2 bp1ContigOffset;
+    known_pos_range2 bp2ContigOffset;
+    known_pos_range2 bp1RefOffset;
+    known_pos_range2 bp2RefOffset;
 };
 
 std::ostream&

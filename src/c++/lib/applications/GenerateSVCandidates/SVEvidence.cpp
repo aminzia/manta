@@ -1,7 +1,7 @@
 // -*- mode: c++; indent-tabs-mode: nil; -*-
 //
 // Manta
-// Copyright (c) 2013 Illumina, Inc.
+// Copyright (c) 2013-2014 Illumina, Inc.
 //
 // This software is provided under the terms and conditions of the
 // Illumina Open Source Software License 1.
@@ -29,7 +29,8 @@ operator<<(
     os << "isEval: " << svbpr.isSplitEvaluated
        << " isSplitSupport: " << svbpr.isSplitSupport
        << " splitEvidence: " << svbpr.splitEvidence
-       << " splitLnLhood: " << svbpr.splitLnLhood;
+       << " splitLnLhood: " << svbpr.splitLnLhood
+       ;
 
     return os;
 }

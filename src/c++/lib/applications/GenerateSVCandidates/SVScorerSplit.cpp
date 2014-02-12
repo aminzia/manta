@@ -1,7 +1,7 @@
 // -*- mode: c++; indent-tabs-mode: nil; -*-
 //
 // Manta
-// Copyright (c) 2013 Illumina, Inc.
+// Copyright (c) 2013-2014 Illumina, Inc.
 //
 // This software is provided under the terms and conditions of the
 // Illumina Open Source Software License 1.
@@ -84,6 +84,7 @@ static
 void
 scoreSplitReads(
     const CallOptionsSharedDeriv& dopt,
+    const unsigned flankScoreSize,
     const SVBreakend& bp,
     const SVAlignmentInfo& svAlignInfo,
     const unsigned minMapQ,
@@ -128,8 +129,8 @@ scoreSplitReads(
         {
             SRAlignmentInfo bp1ContigSR;
             SRAlignmentInfo bp2ContigSR;
-            splitReadAligner(readSeq, dopt.altQ, qual, svAlignInfo.bp1ContigSeq(), svAlignInfo.bp1ContigOffset, bp1ContigSR);
-            splitReadAligner(readSeq, dopt.altQ, qual, svAlignInfo.bp2ContigSeq(), svAlignInfo.bp2ContigOffset, bp2ContigSR);
+            splitReadAligner(flankScoreSize, readSeq, dopt.altQ, qual, svAlignInfo.bp1ContigSeq(), svAlignInfo.bp1ContigOffset, bp1ContigSR);
+            splitReadAligner(flankScoreSize, readSeq, dopt.altQ, qual, svAlignInfo.bp2ContigSeq(), svAlignInfo.bp2ContigOffset, bp2ContigSR);
 
             incrementAlleleEvidence(bp1ContigSR, bp2ContigSR, readMapQ, sample.alt, altBp1ReadSupport, altBp2ReadSupport);
         }
@@ -138,8 +139,8 @@ scoreSplitReads(
         {
             SRAlignmentInfo bp1RefSR;
             SRAlignmentInfo bp2RefSR;
-            splitReadAligner(readSeq, dopt.refQ, qual, svAlignInfo.bp1ReferenceSeq(), svAlignInfo.bp1RefOffset, bp1RefSR);
-            splitReadAligner(readSeq, dopt.refQ, qual, svAlignInfo.bp2ReferenceSeq(), svAlignInfo.bp2RefOffset, bp2RefSR);
+            splitReadAligner(flankScoreSize, readSeq, dopt.refQ, qual, svAlignInfo.bp1ReferenceSeq(), svAlignInfo.bp1RefOffset, bp1RefSR);
+            splitReadAligner(flankScoreSize, readSeq, dopt.refQ, qual, svAlignInfo.bp2ReferenceSeq(), svAlignInfo.bp2RefOffset, bp2RefSR);
 
             // scoring
             incrementAlleleEvidence(bp1RefSR, bp2RefSR, readMapQ, sample.ref, refBp1ReadSupport, refBp2ReadSupport);
@@ -193,7 +194,7 @@ getSVSplitReadSupport(
     SVScoreInfo& baseInfo,
     SVEvidence& evidence)
 {
-    // apply the split-read scoring, only when:
+    // apply the split-read scoring only when:
     // 1) the SV is precise, i.e. has successfully aligned contigs;
     // 2) the values of max depth are reasonable (otherwise, the read map may blow out). (filter is run externally)
 
@@ -203,6 +204,9 @@ getSVSplitReadSupport(
 
     // extract SV alignment info for split read evidence
     const SVAlignmentInfo SVAlignInfo(sv, assemblyData);
+
+    /// how many bases from the end of the microhomology range are part of the split read score?
+    static const unsigned flankScoreSize(50);
 
     // only consider a split alignment with sufficient flanking sequence:
     if (! SVAlignInfo.isMinBpEdge(100)) return;
@@ -224,10 +228,10 @@ getSVSplitReadSupport(
         SVEvidence::evidenceTrack_t& sampleEvidence(evidence.getSample(isTumor));
 
         // scoring split reads overlapping bp1
-        scoreSplitReads(_callDopt, sv.bp1, SVAlignInfo, minMapQ, sampleEvidence,
+        scoreSplitReads(_callDopt, flankScoreSize, sv.bp1, SVAlignInfo, minMapQ, sampleEvidence,
                         bamStream, sample);
         // scoring split reads overlapping bp2
-        scoreSplitReads(_callDopt, sv.bp2, SVAlignInfo, minMapQ, sampleEvidence,
+        scoreSplitReads(_callDopt, flankScoreSize, sv.bp2, SVAlignInfo, minMapQ, sampleEvidence,
                         bamStream, sample);
     }
 
