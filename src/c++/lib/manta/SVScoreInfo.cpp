@@ -249,10 +249,25 @@ operator<<(
 std::ostream&
 operator<<(
     std::ostream& os,
+    const SVScoreInfoBreakend& ssib)
+{
+    os << "maxDepth: " << ssib.maxDepth
+       << " mq0Frac: " << ssib.mq0Frac
+       << " beNoise: " << ssib.breakendNoiseScore
+       << " beConflict: " << ssib.breakendConflictScore
+       << '\n';
+    return os;
+}
+
+
+
+std::ostream&
+operator<<(
+    std::ostream& os,
     const SVScoreInfo& ssi)
 {
-    os << "SVScoreInfo bp1MaxDepth=" << ssi.bp1MaxDepth << " bp2MaxDepth=" << ssi.bp2MaxDepth << '\n'
-       << "SVScoreInfo bp1MQ0Frac=" << ssi.bp1MQ0Frac << " bp2MQ0Frac=" << ssi.bp2MQ0Frac << '\n'
+    os << "SVScoreInfo bp1: " << ssi.bp1 << '\n'
+       << "SVScoreInfo bp2: " << ssi.bp2 << '\n'
        << "Normal sample info " << ssi.normal;
     return os;
 }

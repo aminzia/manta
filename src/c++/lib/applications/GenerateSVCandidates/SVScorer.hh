@@ -212,6 +212,7 @@ private:
         const SVCandidateSetData& svData,
         const SVCandidateAssemblyData& assemblyData,
         const SVCandidate& sv,
+        const bool isSmallAssembler,
         SVScoreInfo& ssInfo,
         SVEvidence& evidence);
 

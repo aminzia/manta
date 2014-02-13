@@ -91,9 +91,9 @@ modifyTranslocInfo(
     const SVScoreInfo& baseInfo(_modelScorePtr->base);
 
     infotags.push_back( str(boost::format("BND_DEPTH=%i") %
-                            (isFirstOfPair ? baseInfo.bp1MaxDepth : baseInfo.bp2MaxDepth) ) );
+                            (isFirstOfPair ? baseInfo.bp1.maxDepth : baseInfo.bp2.maxDepth) ) );
     infotags.push_back( str(boost::format("MATE_BND_DEPTH=%i") %
-                            (isFirstOfPair ? baseInfo.bp2MaxDepth : baseInfo.bp1MaxDepth) ) );
+                            (isFirstOfPair ? baseInfo.bp2.maxDepth : baseInfo.bp1.maxDepth) ) );
 }
 
 

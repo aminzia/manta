@@ -17,7 +17,6 @@
 
 #include "SVScorer.hh"
 
-#include "blt_util/align_path_bam_util.hh"
 #include "blt_util/bam_streamer.hh"
 #include "blt_util/math_util.hh"
 #include "blt_util/prob_util.hh"
@@ -66,130 +65,6 @@ SVScorer(
         // avoid creating shared_ptr temporaries:
         streamPtr tmp(new bam_streamer(afile.c_str()));
         _bamStreams.push_back(tmp);
-    }
-}
-
-
-
-/// add bam alignment to simple short-range vector depth estimate
-///
-/// \param[in] beginPos this is the begin position of the range covered by the depth array
-///
-static
-void
-addReadToDepthEst(
-    const bam_record& bamRead,
-    const pos_t beginPos,
-    std::vector<unsigned>& depth)
-{
-    using namespace ALIGNPATH;
-
-    const pos_t endPos(beginPos+depth.size());
-
-    // get cigar:
-    path_t apath;
-    bam_cigar_to_apath(bamRead.raw_cigar(), bamRead.n_cigar(), apath);
-
-    pos_t refPos(bamRead.pos()-1);
-    BOOST_FOREACH(const path_segment& ps, apath)
-    {
-        if (refPos>=endPos) return;
-
-        if (is_segment_align_match(ps.type))
-        {
-            for (pos_t pos(refPos); pos < (refPos+static_cast<pos_t>(ps.length)); ++pos)
-            {
-                if (pos>=beginPos)
-                {
-                    if (pos>=endPos) return;
-                    depth[pos-beginPos]++;
-                }
-            }
-        }
-        if (is_segment_type_ref_length(ps.type)) refPos += ps.length;
-    }
-}
-
-
-
-void
-SVScorer::
-getBreakendMaxMappedDepthAndMQ0(
-    const bool isMaxDepth,
-    const double cutoffDepth,
-    const SVBreakend& bp,
-    unsigned& maxDepth,
-    float& MQ0Frac)
-{
-    /// define a new interval -/+ 50 bases around the center pos
-    /// of the breakpoint
-    static const pos_t regionSize(50);
-
-    maxDepth=0;
-    MQ0Frac=0;
-
-    unsigned totalReads(0);
-    unsigned totalMQ0Reads(0);
-
-    const pos_t centerPos(bp.interval.range.center_pos());
-    const known_pos_range2 searchRange(std::max((centerPos-regionSize),0), (centerPos+regionSize));
-
-    if (searchRange.size() == 0) return;
-
-    std::vector<unsigned> depth(searchRange.size(),0);
-
-    bool isCutoff(false);
-    bool isNormalFound(false);
-
-    const unsigned bamCount(_bamStreams.size());
-    for (unsigned bamIndex(0); bamIndex < bamCount; ++bamIndex)
-    {
-        if (_isAlignmentTumor[bamIndex]) continue;
-        isNormalFound=true;
-
-        bam_streamer& bamStream(*_bamStreams[bamIndex]);
-
-        // set bam stream to new search interval:
-        bamStream.set_new_region(bp.interval.tid, searchRange.begin_pos(), searchRange.end_pos());
-
-        while (bamStream.next())
-        {
-            const bam_record& bamRead(*(bamStream.get_record_ptr()));
-
-            // turn filtration down to mapped only to match depth estimate method:
-            if (bamRead.is_unmapped()) continue;
-
-            const pos_t refPos(bamRead.pos()-1);
-            if (refPos >= searchRange.end_pos()) break;
-
-            addReadToDepthEst(bamRead,searchRange.begin_pos(),depth);
-
-            totalReads++;
-            if (0 == bamRead.map_qual()) totalMQ0Reads++;
-
-            if (isMaxDepth)
-            {
-                const pos_t depthOffset(refPos-searchRange.begin_pos());
-                if (depthOffset>=0)
-                {
-                    if (depth[depthOffset] > cutoffDepth)
-                    {
-                        isCutoff=true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (isCutoff) break;
-    }
-
-    assert(isNormalFound);
-
-    maxDepth = *(std::max_element(depth.begin(),depth.end()));
-    if (totalReads>=10)
-    {
-        MQ0Frac = static_cast<float>(totalMQ0Reads)/static_cast<float>(totalReads);
     }
 }
 
@@ -357,6 +232,7 @@ scoreSV(
     const SVCandidateSetData& svData,
     const SVCandidateAssemblyData& assemblyData,
     const SVCandidate& sv,
+    const bool isSmallAssembler,
     SVScoreInfo& baseInfo,
     SVEvidence& evidence)
 {
@@ -376,16 +252,23 @@ scoreSV(
     }
 
     // get breakend center_pos depth estimate:
-    getBreakendMaxMappedDepthAndMQ0(isMaxDepth, bp1CutoffDepth, sv.bp1, baseInfo.bp1MaxDepth, baseInfo.bp1MQ0Frac);
-    const bool isBp1OverDepth(baseInfo.bp1MaxDepth > bp1CutoffDepth);
+    getBreakendMaxMappedDepthAndMQ0(isMaxDepth, bp1CutoffDepth, sv.bp1, baseInfo.bp1.maxDepth, baseInfo.bp1.mq0Frac);
+    const bool isBp1OverDepth(baseInfo.bp1.maxDepth > bp1CutoffDepth);
     if (! (isMaxDepth && isBp1OverDepth))
     {
-        getBreakendMaxMappedDepthAndMQ0(isMaxDepth, bp2CutoffDepth, sv.bp2, baseInfo.bp2MaxDepth, baseInfo.bp2MQ0Frac);
+        getBreakendMaxMappedDepthAndMQ0(isMaxDepth, bp2CutoffDepth, sv.bp2, baseInfo.bp2.maxDepth, baseInfo.bp2.mq0Frac);
     }
-    const bool isBp2OverDepth(baseInfo.bp2MaxDepth > bp2CutoffDepth);
+    const bool isBp2OverDepth(baseInfo.bp2.maxDepth > bp2CutoffDepth);
 
     const bool isOverDepth(isBp1OverDepth || isBp2OverDepth);
     const bool isSkipEvidenceSearch(isMaxDepth && isOverDepth);
+
+    /// add information for a new conflicting breakend filter:
+    if(! isSmallAssembler)
+    {
+
+        //getBreakendConflictScore(sv, true, baseInfo.bp1BreakendConflictScore);
+    }
 
     if (! isSkipEvidenceSearch)
     {
@@ -820,11 +703,11 @@ scoreDiploidSV(
         if (dFilter.isMaxDepthFilter())
         {
             // apply maxdepth filter if either of the breakpoints exceeds the maximum depth:
-            if (baseInfo.bp1MaxDepth > dFilter.maxDepth(sv.bp1.interval.tid))
+            if (baseInfo.bp1.maxDepth > dFilter.maxDepth(sv.bp1.interval.tid))
             {
                 diploidInfo.filters.insert(diploidOpt.maxDepthFilterLabel);
             }
-            else if (baseInfo.bp2MaxDepth > dFilter.maxDepth(sv.bp2.interval.tid))
+            else if (baseInfo.bp2.maxDepth > dFilter.maxDepth(sv.bp2.interval.tid))
             {
                 diploidInfo.filters.insert(diploidOpt.maxDepthFilterLabel);
             }
@@ -838,8 +721,8 @@ scoreDiploidSV(
         const bool isMQ0FilterSize(isSVBelowMinSize(sv,1000));
         if (isMQ0FilterSize)
         {
-            if ((baseInfo.bp1MQ0Frac > diploidOpt.maxMQ0Frac) ||
-                (baseInfo.bp2MQ0Frac > diploidOpt.maxMQ0Frac))
+            if ((baseInfo.bp1.mq0Frac > diploidOpt.maxMQ0Frac) ||
+                (baseInfo.bp2.mq0Frac > diploidOpt.maxMQ0Frac))
             {
                 diploidInfo.filters.insert(diploidOpt.maxMQ0FracLabel);
             }
@@ -1206,11 +1089,11 @@ scoreSomaticSV(
         if (dFilter.isMaxDepthFilter())
         {
             // apply maxdepth filter if either of the breakpoints exceeds the maximum depth:
-            if (baseInfo.bp1MaxDepth > dFilter.maxDepth(sv.bp1.interval.tid))
+            if (baseInfo.bp1.maxDepth > dFilter.maxDepth(sv.bp1.interval.tid))
             {
                 somaticInfo.filters.insert(somaticOpt.maxDepthFilterLabel);
             }
-            else if (baseInfo.bp2MaxDepth > dFilter.maxDepth(sv.bp2.interval.tid))
+            else if (baseInfo.bp2.maxDepth > dFilter.maxDepth(sv.bp2.interval.tid))
             {
                 somaticInfo.filters.insert(somaticOpt.maxDepthFilterLabel);
             }
@@ -1224,8 +1107,8 @@ scoreSomaticSV(
         const bool isMQ0FilterSize(isSVBelowMinSize(sv,1000));
         if (isMQ0FilterSize)
         {
-            if ((baseInfo.bp1MQ0Frac > somaticOpt.maxMQ0Frac) ||
-                (baseInfo.bp2MQ0Frac > somaticOpt.maxMQ0Frac))
+            if ((baseInfo.bp1.mq0Frac > somaticOpt.maxMQ0Frac) ||
+                (baseInfo.bp2.mq0Frac > somaticOpt.maxMQ0Frac))
             {
                 somaticInfo.filters.insert(somaticOpt.maxMQ0FracLabel);
             }
@@ -1246,13 +1129,14 @@ scoreSV(
 {
     modelScoreInfo.clear();
 
-    // accumulate model-neutral evidence for each candidate (or its corresponding reference allele)
-    SVEvidence evidence;
-    scoreSV(svData, assemblyData, sv, modelScoreInfo.base, evidence);
-
-    // score components specific to diploid-germline model:
     const bool isSmallAssembler(! assemblyData.isSpanning);
     const float smallSVWeight(getSmallSVWeight(sv,isSmallAssembler));
+
+    // accumulate model-neutral evidence for each candidate (or its corresponding reference allele)
+    SVEvidence evidence;
+    scoreSV(svData, assemblyData, sv, isSmallAssembler, modelScoreInfo.base, evidence);
+
+    // score components specific to diploid-germline model:
     scoreDiploidSV(_diploidOpt, _diploidDopt, sv, smallSVWeight, _dFilterDiploid, evidence, modelScoreInfo.base, modelScoreInfo.diploid);
 
     // score components specific to somatic model:

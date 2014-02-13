@@ -29,7 +29,7 @@ operator<<(
     std::ostream& os,
     const SVScoreInfoDiploid& sid)
 {
-    os << "DiploidSVScoreInfo bp1MaxDepth=" << sid.bp1MaxDepth << " bp2MaxDepth=" << sid.bp2MaxDepth
+    os << "DiploidSVScoreInfo bp1MaxDepth=" << sid.bp1.maxDepth << " bp2MaxDepth=" << sid.bp2.maxDepth
        << " altScore=" << sid.altScore
        << " gtScore=" << sid.gtScore
        << " gt=" << DIPLOID_GT::label(sid.gt)

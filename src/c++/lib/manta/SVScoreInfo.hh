@@ -151,37 +151,55 @@ std::ostream&
 operator<<(std::ostream& os, const SVSampleInfo& si);
 
 
+
+struct SVScoreInfoBreakend
+{
+    SVScoreInfoBreakend() :
+        maxDepth(0),
+        mq0Frac(0),
+        breakendNoiseScore(0),
+        breakendConflictScore(0)
+    {}
+
+    void
+    clear()
+    {
+        maxDepth=0;
+        mq0Frac=0;
+        breakendNoiseScore=0;
+        breakendConflictScore=0;
+    }
+
+    unsigned maxDepth;
+    float mq0Frac;
+    float breakendNoiseScore;
+    float breakendConflictScore;
+};
+
+
+std::ostream&
+operator<<(std::ostream& os, const SVScoreInfoBreakend& ssib);
+
+
+
 /// consolidate model-agnostic scoring results applied to an SV candidate
 struct SVScoreInfo
 {
-    SVScoreInfo() :
-        bp1MaxDepth(0),
-        bp2MaxDepth(0),
-        bp1MQ0Frac(0),
-        bp2MQ0Frac(0)
-    {}
-
     void
     clear()
     {
         normal.clear();
         tumor.clear();
 
-        bp1MaxDepth = 0;
-        bp2MaxDepth = 0;
-
-        bp1MQ0Frac = 0.;
-        bp2MQ0Frac = 0.;
+        bp1.clear();
+        bp2.clear();
     }
 
     SVSampleInfo normal;
     SVSampleInfo tumor;
 
-    unsigned bp1MaxDepth;
-    unsigned bp2MaxDepth;
-
-    float bp1MQ0Frac;
-    float bp2MQ0Frac;
+    SVScoreInfoBreakend bp1;
+    SVScoreInfoBreakend bp2;
 };
 
 
