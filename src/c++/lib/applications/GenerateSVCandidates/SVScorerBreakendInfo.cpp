@@ -155,7 +155,7 @@ addSVsToNoiseScore(
 {
     BOOST_FOREACH(const SVCandidate& sv, svs)
     {
-        if (isSVBelowMinSize(sv,1000)) continue;
+        if (isSVBelowMinSize(sv,10000)) continue;
         if (sv.bp1.interval.isIntersect(region) ||
             sv.bp2.interval.isIntersect(region))
         {
@@ -169,12 +169,12 @@ addSVsToNoiseScore(
 void
 getBreakendNoiseScore(
     const SVCandidate& sv,
-    const std::vector<SVCandidate>& svs,
+    const std::vector<SVCandidate>& /*svs*/,
     const std::vector<SVCandidate>& offEdgeSvs,
     const bool isBp1,
     float& score)
 {
-    static const pos_t noiseSpan(250);
+    static const pos_t noiseSpan(500);
 
     const GenomeInterval& bpRegion(sv.getBp(isBp1).interval);
     GenomeInterval bpTestRegion;
@@ -183,7 +183,7 @@ getBreakendNoiseScore(
     bpTestRegion.range.set_end_pos(bpRegion.range.center_pos()+noiseSpan);
 
     score=0;
-    addSVsToNoiseScore(bpTestRegion,svs,score);
+    //addSVsToNoiseScore(bpTestRegion,svs,score);
     addSVsToNoiseScore(bpTestRegion,offEdgeSvs,score);
 }
 

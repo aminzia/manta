@@ -85,7 +85,8 @@ addSVNodeRead(
 {
     using namespace illumina::common;
 
-    if (scanner.isReadFiltered(bamRead)) return;
+    if (scanner.isReadFilteredCore(bamRead)) return;
+    const bool isFiltered(scanner.isReadFiltered(bamRead));
 
     const bool isNonCompressedAnomalous(scanner.isNonCompressedAnomalous(bamRead,bamIndex));
 
@@ -191,10 +192,13 @@ addSVNodeRead(
         if (! locus.getNode(readLocalIndex).getInterval().isIntersect(localNode.getInterval())) continue;
 
         isOffEdge=false;
+if (! isFiltered)
+{
         svDataGroup.add(bamRead, isExpectRepeat, isNode1);
 
         // once any loci has achieved the local/remote overlap criteria, there's no reason to keep scanning loci
         // of the same bam record:
+}
         break;
     }
 

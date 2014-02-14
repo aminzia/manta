@@ -822,7 +822,7 @@ computeSomaticSampleLoghood(
 #endif
 
     /// TODO: find a better way to set this number from training data:
-    static const ProbSet chimeraProb(1e-4);
+    static const ProbSet chimeraProb(5e-5);
 
     /// use a constant mapping prob for now just to get the zero-th order concept into the model
     /// that "reads are mismapped at a non-trivial rate"

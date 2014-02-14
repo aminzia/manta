@@ -77,6 +77,18 @@ modifyInfo(
 
     infotags.push_back("SOMATIC");
     infotags.push_back( str(boost::format("SOMATICSCORE=%i") % somaticInfo.somaticScore) );
+
+    const SVScoreInfo& baseInfo(_modelScorePtr->base);
+
+    const bool isFirstOfPair(true);
+    const SVScoreInfoBreakend& bpInfo(isFirstOfPair ? baseInfo.bp1 : baseInfo.bp2);
+    const SVScoreInfoBreakend& mateBpInfo(isFirstOfPair ? baseInfo.bp2 : baseInfo.bp1);
+
+    infotags.push_back( str(boost::format("BND_NOISE=%i") % (static_cast<int>(bpInfo.breakendNoiseScore)) ) );
+    infotags.push_back( str(boost::format("MATE_BND_NOISE=%i") % (static_cast<int>(mateBpInfo.breakendNoiseScore)) ) );
+
+    infotags.push_back( str(boost::format("BND_NR=%f") % (static_cast<float>(bpInfo.breakendNoiseScore)/static_cast<float>(1+bpInfo.maxDepth)) ) );
+    infotags.push_back( str(boost::format("MATE_BND_NR=%f") % (static_cast<float>(mateBpInfo.breakendNoiseScore)/static_cast<float>(1+mateBpInfo.maxDepth)) ) );
 }
 
 
@@ -94,9 +106,6 @@ modifyTranslocInfo(
     const SVScoreInfoBreakend& mateBpInfo(isFirstOfPair ? baseInfo.bp2 : baseInfo.bp1);
     infotags.push_back( str(boost::format("BND_DEPTH=%i") % (bpInfo.maxDepth) ) );
     infotags.push_back( str(boost::format("MATE_BND_DEPTH=%i") % (mateBpInfo.maxDepth) ) );
-
-    infotags.push_back( str(boost::format("BND_NOISE=%i") % (static_cast<int>(bpInfo.breakendNoiseScore)) ) );
-    infotags.push_back( str(boost::format("MATE_BND_NOISE=%i") % (static_cast<int>(mateBpInfo.breakendNoiseScore)) ) );
 }
 
 
