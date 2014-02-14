@@ -103,6 +103,12 @@ struct SVCandidate
         return (bp1.state != bp2.state);
     }
 
+    const SVBreakend&
+    getBp(const bool isBp1) const
+    {
+        return ( isBp1 ? bp1 : bp2 );
+    }
+
 private:
     bool _isImprecise;
 

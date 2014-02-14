@@ -90,11 +90,13 @@ modifyTranslocInfo(
     assert(_modelScorePtr != NULL);
     const SVScoreInfo& baseInfo(_modelScorePtr->base);
 
-    infotags.push_back( str(boost::format("BND_DEPTH=%i") %
-                            (isFirstOfPair ? baseInfo.bp1.maxDepth : baseInfo.bp2.maxDepth) ) );
-    infotags.push_back( str(boost::format("MATE_BND_DEPTH=%i") %
-                            (isFirstOfPair ? baseInfo.bp2.maxDepth : baseInfo.bp1.maxDepth) ) );
+    const SVScoreInfoBreakend& bpInfo(isFirstOfPair ? baseInfo.bp1 : baseInfo.bp2);
+    const SVScoreInfoBreakend& mateBpInfo(isFirstOfPair ? baseInfo.bp2 : baseInfo.bp1);
+    infotags.push_back( str(boost::format("BND_DEPTH=%i") % (bpInfo.maxDepth) ) );
+    infotags.push_back( str(boost::format("MATE_BND_DEPTH=%i") % (mateBpInfo.maxDepth) ) );
 
+    infotags.push_back( str(boost::format("BND_NOISE=%i") % (static_cast<int>(bpInfo.breakendNoiseScore)) ) );
+    infotags.push_back( str(boost::format("MATE_BND_NOISE=%i") % (static_cast<int>(mateBpInfo.breakendNoiseScore)) ) );
 }
 
 

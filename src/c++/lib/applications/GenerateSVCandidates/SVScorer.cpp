@@ -16,6 +16,7 @@
 ///
 
 #include "SVScorer.hh"
+#include "SVScorerBreakendInfo.hh"
 
 #include "blt_util/bam_streamer.hh"
 #include "blt_util/math_util.hh"
@@ -233,6 +234,8 @@ scoreSV(
     const SVCandidateAssemblyData& assemblyData,
     const SVCandidate& sv,
     const bool isSmallAssembler,
+    const std::vector<SVCandidate>& svs,
+    const std::vector<SVCandidate>& offEdgeSvs,
     SVScoreInfo& baseInfo,
     SVEvidence& evidence)
 {
@@ -264,10 +267,10 @@ scoreSV(
     const bool isSkipEvidenceSearch(isMaxDepth && isOverDepth);
 
     /// add information for a new conflicting breakend filter:
-    if(! isSmallAssembler)
+    if(! (isSmallAssembler || isSVBelowMinSize(sv,1000)))
     {
-
-        //getBreakendConflictScore(sv, true, baseInfo.bp1BreakendConflictScore);
+        getBreakendNoiseScore(sv, svs, offEdgeSvs, true, baseInfo.bp1.breakendNoiseScore);
+        getBreakendNoiseScore(sv, svs, offEdgeSvs, false, baseInfo.bp2.breakendNoiseScore);
     }
 
     if (! isSkipEvidenceSearch)
@@ -1125,6 +1128,8 @@ scoreSV(
     const SVCandidateAssemblyData& assemblyData,
     const SVCandidate& sv,
     const bool isSomatic,
+    const std::vector<SVCandidate>& svs,
+    const std::vector<SVCandidate>& offEdgeSvs,
     SVModelScoreInfo& modelScoreInfo)
 {
     modelScoreInfo.clear();
@@ -1134,7 +1139,7 @@ scoreSV(
 
     // accumulate model-neutral evidence for each candidate (or its corresponding reference allele)
     SVEvidence evidence;
-    scoreSV(svData, assemblyData, sv, isSmallAssembler, modelScoreInfo.base, evidence);
+    scoreSV(svData, assemblyData, sv, isSmallAssembler, svs, offEdgeSvs, modelScoreInfo.base, evidence);
 
     // score components specific to diploid-germline model:
     scoreDiploidSV(_diploidOpt, _diploidDopt, sv, smallSVWeight, _dFilterDiploid, evidence, modelScoreInfo.base, modelScoreInfo.diploid);

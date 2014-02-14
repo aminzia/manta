@@ -115,12 +115,15 @@ struct SVWriter
         }
     }
 
+    /// add svs and offEdgeSvs to assist with noise filtration
     void
     writeSV(
         const EdgeInfo& edge,
         const SVCandidateSetData& svData,
         const SVCandidateAssemblyData& assemblyData,
-        const SVCandidate& sv)
+        const SVCandidate& sv,
+        const std::vector<SVCandidate>& svs,
+        const std::vector<SVCandidate>& offEdgeSvs)
     {
         static const unsigned minCandidateSpanningCount(3);
 
@@ -176,7 +179,7 @@ struct SVWriter
             return;
         }
 
-        svScore.scoreSV(svData, assemblyData, sv, isSomatic, modelScoreInfo);
+        svScore.scoreSV(svData, assemblyData, sv, isSomatic, svs, offEdgeSvs, modelScoreInfo);
 
         if (modelScoreInfo.diploid.altScore >= opt.diploidOpt.minOutputAltScore)
         {
@@ -297,6 +300,7 @@ runGSC(
 
     SVCandidateSetData svData;
     std::vector<SVCandidate> svs;
+    std::vector<SVCandidate> offEdgeSvs;
 
     static const std::string logtag("runGSC");
     if (opt.isVerbose)
@@ -323,7 +327,7 @@ runGSC(
         try
         {
             // find number, type and breakend range (or better: breakend distro) of SVs on this edge:
-            svFind.findCandidateSV(chromToIndex, edge, svData, svs,
+            svFind.findCandidateSV(chromToIndex, edge, svData, svs, offEdgeSvs,
                                    truthTracker);
 
             truthTracker.reportNumCands(svs.size(), edge);
@@ -368,7 +372,7 @@ runGSC(
 #ifdef DEBUG_GSV
                     log_os << logtag << " score and output low-res candidate\n";
 #endif
-                    svWriter.writeSV(edge, svData, assemblyData, candidateSV);
+                    svWriter.writeSV(edge, svData, assemblyData, candidateSV, svs, offEdgeSvs);
 
                 }
                 else
@@ -383,7 +387,7 @@ runGSC(
 #ifdef DEBUG_GSV
                         log_os << logtag << " score and output assembly candidate: " << assembledSV << "\n";
 #endif
-                        svWriter.writeSV(edge, svData, assemblyData, assembledSV);
+                        svWriter.writeSV(edge, svData, assemblyData, assembledSV, svs, offEdgeSvs);
                     }
                 }
             }

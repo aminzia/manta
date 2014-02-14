@@ -152,6 +152,8 @@ struct SVScorer
         const SVCandidateAssemblyData& assemblyData,
         const SVCandidate& sv,
         const bool isSomatic,
+        const std::vector<SVCandidate>& svs,
+        const std::vector<SVCandidate>& offEdgeSvs,
         SVModelScoreInfo& modelScoreInfo);
 
     typedef boost::shared_ptr<SVScorePairProcessor> pairProcPtr;
@@ -213,6 +215,8 @@ private:
         const SVCandidateAssemblyData& assemblyData,
         const SVCandidate& sv,
         const bool isSmallAssembler,
+        const std::vector<SVCandidate>& svs,
+        const std::vector<SVCandidate>& offEdgeSvs,
         SVScoreInfo& ssInfo,
         SVEvidence& evidence);
 

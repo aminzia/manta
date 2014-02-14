@@ -51,6 +51,7 @@ struct SVFinder
         const EdgeInfo& edge,
         SVCandidateSetData& svData,
         std::vector<SVCandidate>& svs,
+        std::vector<SVCandidate>& offEdgeSvs,
         TruthTracker& truthTracker);
 
     void
@@ -74,6 +75,19 @@ private:
 
 
     void
+    addDataGroupToSvs(
+        const SVLocusNode& node1,
+        const SVLocusNode& node2,
+        const std::map<std::string, int32_t>& chromToIndex,
+        const reference_contig_segment& refSeq1,
+        const reference_contig_segment& refSeq2,
+        const unsigned bamIndex,
+        const bool isOffEdge,
+        SVCandidateSetReadPairSampleGroup& svDataGroup,
+        std::vector<SVCandidate>& svs,
+        TruthTracker& truthTracker);
+
+    void
     getCandidatesFromData(
         const SVLocusNode& node1,
         const SVLocusNode& node2,
@@ -82,6 +96,7 @@ private:
         const reference_contig_segment& refSeq2,
         SVCandidateSetData& svData,
         std::vector<SVCandidate>& svs,
+        std::vector<SVCandidate>& offEdgeSvs,
         TruthTracker& truthTracker);
 
     const ChromDepthFilterUtil&

@@ -80,6 +80,7 @@ addSVNodeRead(
     const reference_contig_segment& refSeq,
     const bool isNode1,
     SVCandidateSetReadPairSampleGroup& svDataGroup,
+    SVCandidateSetReadPairSampleGroup& svOffEdgeDataGroup,
     TruthTracker& truthTracker)
 {
     using namespace illumina::common;
@@ -112,13 +113,31 @@ addSVNodeRead(
         svDataGroup.setFull();
     }
 
+    static const unsigned maxNoiseDataSize(1000);
+    if ((! svOffEdgeDataGroup.isFull()) && (svOffEdgeDataGroup.size() >= maxNoiseDataSize))
+    {
+        svOffEdgeDataGroup.setFull();
+    }
+
     //
-    // run an initial screen to make sure at least one candidate from this read matches the regions for this edge:
+    // run an initial screen to make sure at least one candidate from this read matches the regions for this edge,
+    // if so, then the read goes into svDataGroup.
+    // if not, then if there's at least one other long-range candidate (>= 1,000 bases), then
     //
     typedef std::vector<SVLocus> loci_t;
     loci_t loci;
     scanner.getSVLoci(bamRead, bamIndex, chromToIndex, refSeq, loci,
                       truthTracker);
+
+    // isOffEdge is the default state unless we find out the read is associated with the target edge
+    //
+    // isLongRangeEdge is only relevant if we determine this is a noise edge
+    //
+    // the goal is to gather all long-range noise observations for use in
+    // late-stage SV noise filtration
+    //
+    bool isOffEdge(true);
+    bool isLongRangeEdge(false);
 
     BOOST_FOREACH(const SVLocus& locus, loci)
     {
@@ -141,6 +160,27 @@ addSVNodeRead(
                     << "\tlocus: " << locus << "\n";
                 BOOST_THROW_EXCEPTION(LogicException(oss.str()));
             }
+
+            if (! isLongRangeEdge)
+            {
+                const GenomeInterval& local(locus.getNode(readLocalIndex).getInterval());
+                const GenomeInterval& remote(locus.getNode(readRemoteIndex).getInterval());
+
+                if (local.tid != remote.tid)
+                {
+                    isLongRangeEdge=true;
+                }
+                else
+                {
+                    static const int longRangeEdgeSize(1000);
+
+                    if (std::abs(local.range.center_pos()-remote.range.center_pos()) > longRangeEdgeSize)
+                    {
+                        isLongRangeEdge=true;
+                    }
+                }
+            }
+
             if (! locus.getNode(readRemoteIndex).getInterval().isIntersect(remoteNode.getInterval())) continue;
         }
         else
@@ -150,11 +190,18 @@ addSVNodeRead(
 
         if (! locus.getNode(readLocalIndex).getInterval().isIntersect(localNode.getInterval())) continue;
 
+        isOffEdge=false;
         svDataGroup.add(bamRead, isExpectRepeat, isNode1);
 
         // once any loci has achieved the local/remote overlap criteria, there's no reason to keep scanning loci
         // of the same bam record:
         break;
+    }
+
+    // store reads associated with noise edges:
+    if (isOffEdge && isLongRangeEdge)
+    {
+        svOffEdgeDataGroup.add(bamRead, isExpectRepeat, isNode1);
     }
 }
 
@@ -268,6 +315,7 @@ addSVNodeData(
         assert((! isFirstTumor) || isTumor);
 
         SVCandidateSetReadPairSampleGroup& svDataGroup(svData.getDataGroup(bamIndex));
+        SVCandidateSetReadPairSampleGroup& svOffEdgeDataGroup(svData.getOffEdgeDataGroup(bamIndex));
         bam_streamer& read_stream(*bamPtr);
 
         // set bam stream to new search interval:
@@ -301,10 +349,11 @@ addSVNodeData(
             }
 
             // test if read supports an SV on this edge, if so, add to SVData
+            // if not, add to noiseSVData so that we can use it for filtration later
             addSVNodeRead(
                 chromToIndex,_readScanner, localNode, remoteNode,
                 bamRead, bamIndex, isExpectRepeat, refSeq, isNode1,
-                svDataGroup, truthTracker);
+                svDataGroup, svOffEdgeDataGroup, truthTracker);
         }
         ++bamIndex;
     }
@@ -445,6 +494,7 @@ private:
 static
 void
 consolidateOverlap(
+    const bool isOffEdge,
     const unsigned bamCount,
     SVCandidateSetData& svData,
     std::vector<SVCandidate>& svs)
@@ -521,7 +571,7 @@ consolidateOverlap(
 
         for (unsigned bamIndex(0); bamIndex < bamCount; ++bamIndex)
         {
-            SVCandidateSetReadPairSampleGroup& svDataGroup(svData.getDataGroup(bamIndex));
+            SVCandidateSetReadPairSampleGroup& svDataGroup( isOffEdge ?  svData.getOffEdgeDataGroup(bamIndex) : svData.getDataGroup(bamIndex));
             BOOST_FOREACH(SVCandidateSetReadPair& pair, svDataGroup)
             {
                 BOOST_FOREACH(SVPairAssociation& sva, pair.svLink)
@@ -537,13 +587,40 @@ consolidateOverlap(
 }
 
 
+static
+bool
+isSVCandidateIntersectEdge(
+    const SVLocusNode& node1,
+    const SVLocusNode& node2,
+    const SVCandidate& readCand)
+{
+    // remove candidates which don't match the current edge:
+    //
+    if (isComplexSV(readCand))
+    {
+        if (! readCand.bp1.interval.isIntersect(node1.getInterval())) return false;
+        if (! readCand.bp1.interval.isIntersect(node2.getInterval())) return false;
+    }
+    else
+    {
+        const bool isIntersect((readCand.bp1.interval.isIntersect(node1.getInterval())) &&
+                               (readCand.bp2.interval.isIntersect(node2.getInterval())));
+        const bool isSwapIntersect((readCand.bp1.interval.isIntersect(node2.getInterval())) &&
+                                   (readCand.bp2.interval.isIntersect(node1.getInterval())));
+        if (! (isIntersect || isSwapIntersect)) return false;
+    }
+    return true;
+}
+
+
+
 /// readCandidates are the set of hypothesis generated by individual read pair --
 /// this is the read pair which we seek to assign to one of the identified SVs (in svs)
 /// or we push the candidate into svs to start a new candidate associated with this edge
 ///
 /// this is meant as only a temporary form of hypothesis generation, in the current system
-/// we do at least delinate alternative candidates by strand and region overlap, but over
-/// the longer term we should be able to delinate cluster by a clustering of possible
+/// we do at least delineate alternative candidates by strand and region overlap, but over
+/// the longer term we should be able to delineate cluster by a clustering of possible
 /// breakend locations.
 ///
 static
@@ -552,6 +629,7 @@ assignPairObservationsToSVCandidates(
     const SVLocusNode& node1,
     const SVLocusNode& node2,
     const std::vector<SVObservation>& readCandidates,
+    const bool isOffEdge,
     SVCandidateSetReadPair& pair,
     std::vector<SVCandidate>& svs)
 {
@@ -568,23 +646,10 @@ assignPairObservationsToSVCandidates(
         log_os << logtag << "Starting assignment for read cand: " << readCand << "\n";
 #endif
 
-        {
-            // remove candidates which don't match the current edge:
-            //
-            if (isComplexSV(readCand))
-            {
-                if (! readCand.bp1.interval.isIntersect(node1.getInterval())) continue;
-                if (! readCand.bp1.interval.isIntersect(node2.getInterval())) continue;
-            }
-            else
-            {
-                const bool isIntersect((readCand.bp1.interval.isIntersect(node1.getInterval())) &&
-                                       (readCand.bp2.interval.isIntersect(node2.getInterval())));
-                const bool isSwapIntersect((readCand.bp1.interval.isIntersect(node2.getInterval())) &&
-                                           (readCand.bp2.interval.isIntersect(node1.getInterval())));
-                if (! (isIntersect || isSwapIntersect)) continue;
-            }
-        }
+        // remove candidates which don't match the current edge match state:
+        //
+        const bool isCandidateOffEdge(! isSVCandidateIntersectEdge(node1, node2, readCand));
+        if (isCandidateOffEdge != isOffEdge) continue;
 
         /// spanning means there's a left and right breakend (in any order) -- note this is not the
         /// same as asking if the evidence comes from a read pair. For instance, a CIGAR string can
@@ -655,6 +720,62 @@ assignPairObservationsToSVCandidates(
 
 void
 SVFinder::
+addDataGroupToSvs(
+    const SVLocusNode& node1,
+    const SVLocusNode& node2,
+    const std::map<std::string, int32_t>& chromToIndex,
+    const reference_contig_segment& refSeq1,
+    const reference_contig_segment& refSeq2,
+    const unsigned bamIndex,
+    const bool isOffEdge,
+    SVCandidateSetReadPairSampleGroup& svDataGroup,
+    std::vector<SVCandidate>& svs,
+    TruthTracker& truthTracker)
+{
+    std::vector<SVObservation> readCandidates;
+
+    BOOST_FOREACH(SVCandidateSetReadPair& pair, svDataGroup)
+    {
+        SVCandidateSetRead* localReadPtr(&(pair.read1));
+        SVCandidateSetRead* remoteReadPtr(&(pair.read2));
+        pair.svLink.clear();
+
+        if (! localReadPtr->isSet())
+        {
+            std::swap(localReadPtr,remoteReadPtr);
+        }
+        assert(localReadPtr->isSet() && "Neither read in pair is set");
+
+        const bam_record* remoteBamRecPtr( remoteReadPtr->isSet() ? &(remoteReadPtr->bamrec) : NULL);
+
+        const reference_contig_segment& localRef( localReadPtr->isNode1 ? refSeq1 : refSeq2 );
+        const reference_contig_segment* remoteRefPtr(NULL);
+        if (remoteReadPtr->isSet())
+        {
+            remoteRefPtr = (remoteReadPtr->isNode1 ?  &refSeq1 : &refSeq2 );
+        }
+        _readScanner.getBreakendPair(localReadPtr->bamrec, remoteBamRecPtr,
+                                     bamIndex, chromToIndex, localRef,
+                                     remoteRefPtr, readCandidates,
+                                     truthTracker);
+
+    #ifdef DEBUG_SVDATA
+        log_os << "Checking pair: " << pair << "\n";
+        log_os << "Translated to candidates:\n";
+        BOOST_FOREACH(const SVObservation& cand, readCandidates)
+        {
+            log_os << __FUNCTION__ << ": cand: " << cand << "\n";
+        }
+    #endif
+
+        assignPairObservationsToSVCandidates(node1, node2, readCandidates, isOffEdge, pair, svs);
+    }
+}
+
+
+
+void
+SVFinder::
 getCandidatesFromData(
     const SVLocusNode& node1,
     const SVLocusNode& node2,
@@ -663,52 +784,20 @@ getCandidatesFromData(
     const reference_contig_segment& refSeq2,
     SVCandidateSetData& svData,
     std::vector<SVCandidate>& svs,
+    std::vector<SVCandidate>& offEdgeSvs,
     TruthTracker& truthTracker)
 {
-    std::vector<SVObservation> readCandidates;
-
     const unsigned bamCount(_bamStreams.size());
 
     for (unsigned bamIndex(0); bamIndex<bamCount; ++bamIndex)
     {
         SVCandidateSetReadPairSampleGroup& svDataGroup(svData.getDataGroup(bamIndex));
 
-        BOOST_FOREACH(SVCandidateSetReadPair& pair, svDataGroup)
-        {
-            SVCandidateSetRead* localReadPtr(&(pair.read1));
-            SVCandidateSetRead* remoteReadPtr(&(pair.read2));
-            pair.svLink.clear();
+        addDataGroupToSvs(node1,node2,chromToIndex,refSeq1,refSeq2,bamIndex,false,svDataGroup,svs,truthTracker);
 
-            if (! localReadPtr->isSet())
-            {
-                std::swap(localReadPtr,remoteReadPtr);
-            }
-            assert(localReadPtr->isSet() && "Neither read in pair is set");
+        SVCandidateSetReadPairSampleGroup& svOffEdgeDataGroup(svData.getOffEdgeDataGroup(bamIndex));
 
-            const bam_record* remoteBamRecPtr( remoteReadPtr->isSet() ? &(remoteReadPtr->bamrec) : NULL);
-
-            const reference_contig_segment& localRef( localReadPtr->isNode1 ? refSeq1 : refSeq2 );
-            const reference_contig_segment* remoteRefPtr(NULL);
-            if (remoteReadPtr->isSet())
-            {
-                remoteRefPtr = (remoteReadPtr->isNode1 ?  &refSeq1 : &refSeq2 );
-            }
-            _readScanner.getBreakendPair(localReadPtr->bamrec, remoteBamRecPtr,
-                                         bamIndex, chromToIndex, localRef,
-                                         remoteRefPtr, readCandidates,
-                                         truthTracker);
-
-#ifdef DEBUG_SVDATA
-            log_os << "Checking pair: " << pair << "\n";
-            log_os << "Translated to candidates:\n";
-            BOOST_FOREACH(const SVObservation& cand, readCandidates)
-            {
-                log_os << __FUNCTION__ << ": cand: " << cand << "\n";
-            }
-#endif
-
-            assignPairObservationsToSVCandidates(node1, node2, readCandidates, pair, svs);
-        }
+        addDataGroupToSvs(node1,node2,chromToIndex,refSeq1,refSeq2,bamIndex,true,svOffEdgeDataGroup,offEdgeSvs,truthTracker);
     }
 
 #ifdef DEBUG_SVDATA
@@ -724,7 +813,8 @@ getCandidatesFromData(
     }
 #endif
 
-    consolidateOverlap(bamCount,svData,svs);
+    consolidateOverlap(false, bamCount, svData, svs);
+    consolidateOverlap(true, bamCount, svData, offEdgeSvs);
 
 #ifdef DEBUG_SVDATA
     {
@@ -749,6 +839,7 @@ findCandidateSV(
     const EdgeInfo& edge,
     SVCandidateSetData& svData,
     std::vector<SVCandidate>& svs,
+    std::vector<SVCandidate>& offEdgeSvs,
     TruthTracker& truthTracker)
 {
     svData.clear();
@@ -805,7 +896,7 @@ findCandidateSV(
     const SVLocusNode& node1(locus.getNode(edge.nodeIndex1));
     const SVLocusNode& node2(locus.getNode(edge.nodeIndex2));
     getCandidatesFromData(node1,node2,chromToIndex, refSeq1, refSeq2, svData,
-                          svs, truthTracker);
+                          svs, offEdgeSvs, truthTracker);
 
     //checkResult(svData,svs);
 }

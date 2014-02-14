@@ -216,10 +216,34 @@ struct SVCandidateSetData
         return diter->second;
     }
 
+    /// noise data is tracked to filter calls based on local breakend noise or a strong incompatible hypothesis:
+    ///
+
+    /// get evidence associated with a specific sample group:
+    SVCandidateSetReadPairSampleGroup&
+    getOffEdgeDataGroup(const unsigned bamIndex)
+    {
+        data_t::iterator diter(_offEdgeData.find(bamIndex));
+        if (diter != _offEdgeData.end()) return diter->second;
+
+        std::pair<data_t::iterator,bool> diter2 = _offEdgeData.insert(std::make_pair(bamIndex,SVCandidateSetReadPairSampleGroup()));
+        return diter2.first->second;
+    }
+
+    /// get evidence associated with a specific sample group:
+    const SVCandidateSetReadPairSampleGroup&
+    getOffEdgeDataGroup(const unsigned bamIndex) const
+    {
+        data_t::const_iterator diter(_offEdgeData.find(bamIndex));
+        assert(diter != _offEdgeData.end());
+        return diter->second;
+    }
+
     void
     clear()
     {
         _data.clear();
+        _offEdgeData.clear();
         _searchIntervals.clear();
     }
 
@@ -234,6 +258,8 @@ struct SVCandidateSetData
 private:
     typedef std::map<unsigned,SVCandidateSetReadPairSampleGroup> data_t;
     data_t _data;
+
+    data_t _offEdgeData;
 
     std::vector<GenomeInterval> _searchIntervals;
 };

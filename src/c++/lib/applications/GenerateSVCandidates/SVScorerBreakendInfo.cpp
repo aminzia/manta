@@ -15,9 +15,10 @@
 /// \author Chris Saunders and Xiaoyu Chen
 ///
 
-#include "SVScorer.hh"
+#include "SVScorerBreakendInfo.hh"
 
 #include "blt_util/align_path_bam_util.hh"
+#include "manta/SVCandidateUtil.hh"
 
 
 
@@ -142,3 +143,47 @@ getBreakendMaxMappedDepthAndMQ0(
         MQ0Frac = static_cast<float>(totalMQ0Reads)/static_cast<float>(totalReads);
     }
 }
+
+
+
+static
+void
+addSVsToNoiseScore(
+    const GenomeInterval& region,
+    const std::vector<SVCandidate>& svs,
+    float& score)
+{
+    BOOST_FOREACH(const SVCandidate& sv, svs)
+    {
+        if (isSVBelowMinSize(sv,1000)) continue;
+        if (sv.bp1.interval.isIntersect(region) ||
+            sv.bp2.interval.isIntersect(region))
+        {
+            score += 1;
+        }
+    }
+}
+
+
+
+void
+getBreakendNoiseScore(
+    const SVCandidate& sv,
+    const std::vector<SVCandidate>& svs,
+    const std::vector<SVCandidate>& offEdgeSvs,
+    const bool isBp1,
+    float& score)
+{
+    static const pos_t noiseSpan(250);
+
+    const GenomeInterval& bpRegion(sv.getBp(isBp1).interval);
+    GenomeInterval bpTestRegion;
+    bpTestRegion.tid = bpRegion.tid;
+    bpTestRegion.range.set_begin_pos(bpRegion.range.center_pos()-noiseSpan);
+    bpTestRegion.range.set_end_pos(bpRegion.range.center_pos()+noiseSpan);
+
+    score=0;
+    addSVsToNoiseScore(bpTestRegion,svs,score);
+    addSVsToNoiseScore(bpTestRegion,offEdgeSvs,score);
+}
+
