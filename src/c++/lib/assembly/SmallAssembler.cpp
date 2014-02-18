@@ -193,7 +193,7 @@ doDFS(const str_uint_map_t& wordCount,
 	if (!neighbourFound) {
 		// at the end of a branch, save contig
 #ifdef DEBUG_ASBL
-		std::cerr << "Branch end: ctg=" << contigSoFar.sequence << " cov=" << contigSoFar.avgCoverage << " numKmers=" << contigSoFar.numKmers << std::endl;
+		std::cerr << "Branch end: ctg=" << contigSoFar.seq << " cov=" << contigSoFar.avgCoverage << " numKmers=" << contigSoFar.numKmers << std::endl;
 #endif
 		contigs.push_back(contigSoFar);
 	}

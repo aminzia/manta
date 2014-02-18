@@ -656,9 +656,11 @@ getJumpAssembly(
 
 #ifdef DEBUG_REFINER
     log_os << logtag << "al1RefSize/Seq: " << align1RefStrPtr->size() << '\n';
+    log_os << logtag << "al1RefSize/Pos: " << sv.bp1.interval << '\n';
     printSeq(*align1RefStrPtr,log_os);
     log_os << '\n';
     log_os << logtag << "al2Refsize/Seq: " << align2RefStrPtr->size() << '\n';
+    log_os << logtag << "al2Refsize/Pos: " << sv.bp2.interval << '\n';
     printSeq(*align2RefStrPtr,log_os);
     log_os << '\n';
 #endif
