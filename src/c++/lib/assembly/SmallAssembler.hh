@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "assembly/AssembledContig.hh"
+#include "assembly/Contig.hh"
 #include "assembly/AssemblyReadInfo.hh"
 #include "options/SmallAssemblerOptions.hh"
 

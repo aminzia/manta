@@ -15,7 +15,7 @@
 /// \author Ole Schulz-Trieglaff
 ///
 
-#include "AssembledContig.hh"
+#include "Contig.hh"
 #include "blt_util/seq_printer.hh"
 
 #include <iostream>

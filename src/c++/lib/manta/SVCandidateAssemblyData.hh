@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "assembly/AssembledContig.hh"
+#include "assembly/Contig.hh"
 #include "alignment/GlobalAligner.hh"
 #include "alignment/GlobalJumpAligner.hh"
 #include "blt_util/reference_contig_segment.hh"

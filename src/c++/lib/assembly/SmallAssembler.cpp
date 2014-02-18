@@ -152,7 +152,54 @@ dumpHash(const str_uint_map_t& wordCount,
 }
 #endif
 
-// Prototype of a DFS traversal
+#if 0
+static
+void
+findMaxPaths(const str_uint_map_t& wordCount,
+			 Contig& contigSoFar,
+			 const unsigned wordLength,
+			 str_bool_map_t& seenVertices,
+			 std::vector<Contig>& contigs) {
+
+	// we walk only to the left
+	static const bool isEnd(true);
+
+	std::string tmp(getEnd(contigSoFar.seq,wordLength-1,isEnd));
+	bool neighbourFound(false);
+	BOOST_FOREACH(const char symbol, alphabet) {
+		const std::string overlap(addBase(tmp,symbol,isEnd));
+
+        //TODO:: this follows all branches regardless of coverage
+        // need to see if this is a good thing
+		str_uint_map_t::const_iterator ct = wordCount.find(overlap);
+	    if (ct != wordCount.end() && !seenVertices[overlap]) {
+	        seenVertices[overlap] = true;
+	        // copy contig sequence
+	    	Contig newCtg(contigSoFar);
+	     	newCtg.seq += symbol;
+	     	// update running average of coverage
+	     	newCtg.avgCoverage = (ct->second+newCtg.numKmers*newCtg.avgCoverage)/(newCtg.numKmers+1);
+	     	++newCtg.numKmers;
+
+	    	//std::cerr << "Extending contig " << symbol << " " << newCtg << "\n";
+	    	findMaxPath(wordCount,newCtg,wordLength,seenVertices,contigs);
+	    	neighbourFound=true;
+	    }
+	}
+	if (neighbourFound) {
+		// at the end of a maximum path, save contig
+#ifdef DEBUG_ASBL
+		std::cerr << "Max path end: ctg=" << contigSoFar.seq << " cov=" << contigSoFar.avgCoverage << " numKmers=" << contigSoFar.numKmers << std::endl;
+#endif
+		contigs.push_back(contigSoFar);
+		contigSoFar.seq="";
+		contigSoFar.avgCoverage=0;
+		contigSoFar.numKmers=0;
+	}
+}
+#endif
+
+
 static
 void
 doDFS(const str_uint_map_t& wordCount,
@@ -193,7 +240,7 @@ doDFS(const str_uint_map_t& wordCount,
 	if (!neighbourFound) {
 		// at the end of a branch, save contig
 #ifdef DEBUG_ASBL
-		std::cerr << "Branch end: ctg=" << contigSoFar.seq << " cov=" << contigSoFar.avgCoverage << " numKmers=" << contigSoFar.numKmers << std::endl;
+		std::cerr << "Branch end: ctg=" << contigSoFar.sequence << " cov=" << contigSoFar.avgCoverage << " numKmers=" << contigSoFar.numKmers << " len=" << contigSoFar.sequence.size() << std::endl;
 #endif
 		contigs.push_back(contigSoFar);
 	}
@@ -346,6 +393,75 @@ walk(const SmallAssemblerOptions& opt,
 
 static
 bool
+buildHash(str_uint_map_t& wordHash,
+		  std::string& firstWord,
+		  std::vector<str_uint_map_t>& readWordOffsets,
+		  const AssemblyReadOutput& readInfo,
+		  const AssemblyReadInput& reads,
+          const unsigned wordLength)
+{
+	int firstWordPos(std::numeric_limits<int>::max());
+	const unsigned readCount(reads.size());
+
+	for (unsigned readIndex(0); readIndex<readCount; ++readIndex)
+	{
+		const AssemblyReadInfo& rinfo(readInfo[readIndex]);
+        // skip reads used in a previous iteration
+        if (rinfo.isUsed) continue;
+
+        // stores the index of a kmer in a read sequence
+	    const std::string& seq(reads[readIndex].second);
+	    const unsigned readLen(seq.size());
+
+	    // this read is unusable for assembly:
+	    if (readLen < wordLength) continue;
+
+	    str_uint_map_t& readWordOffset(readWordOffsets[readIndex]);
+
+	    for (unsigned j(0); j<=(readLen-wordLength); ++j)
+	    {
+	    	const std::string word(seq.substr(j,wordLength));
+	        if (readWordOffset.find(word) != readWordOffset.end())
+	        {
+	        	// try again with different k-mer size
+	#ifdef DEBUG_ASBL
+	            log_os << logtag << "word " << word << " repeated in read " << readIndex << "\n";
+	#endif
+	                return false;
+	        }
+
+			// record (0-indexed) start point for word in read
+			//std::cerr << "Recording " << word << " at " << j << " in " << seq <<  "\n";
+			readWordOffset[word]=j;
+
+			// count occurrences
+			++wordHash[word];
+			/*if (wordCount[word]>maxWordCount)
+			{
+				maxWordCount  = wordCount[word];
+				maxWord = word;
+			}*/
+
+			if(reads[readIndex].first<firstWordPos && j==0) {
+				firstWord = word;
+				firstWordPos = reads[readIndex].first;
+			}
+		}
+	}
+
+/*    if (maxWordCount < opt.minCoverage)
+	{
+#ifdef DEBUG_ASBL
+		log_os << logtag << "Coverage too low : " << maxWordCount << " " << opt.minCoverage << "\n";
+#endif
+		return false;
+	}
+*/
+	return true;
+}
+
+static
+bool
 buildContigs(
     const SmallAssemblerOptions& /*opt*/,
     const AssemblyReadInput& reads,
@@ -358,7 +474,7 @@ buildContigs(
 #endif
     )
 {
-    const unsigned readCount(reads.size());
+
 
 #ifdef DEBUG_ASBL
     static const std::string logtag("buildContigs: ");
@@ -369,74 +485,22 @@ buildContigs(
     }
 #endif
 
+    std::string firstWord;
+    const unsigned readCount(reads.size());
+
     // a set of read hashes; each read hash stores the starting positions of all kmers in the read
     std::vector<str_uint_map_t> readWordOffsets(readCount);
 
     // counts the number of occurrences for each kmer in all reads
-    str_uint_map_t wordCount;
+    str_uint_map_t wordHash;
+
+    buildHash(wordHash,firstWord,readWordOffsets,readInfo,reads,wordLength);
 
     // most frequent kmer and its number of occurrences
     //unsigned maxWordCount(0);
     //std::string maxWord;
 
-    int firstWordPos(std::numeric_limits<int>::max());
-    std::string firstWord;
 
-    for (unsigned readIndex(0); readIndex<readCount; ++readIndex)
-    {
-        const AssemblyReadInfo& rinfo(readInfo[readIndex]);
-
-        // skip reads used in a previous iteration
-        if (rinfo.isUsed) continue;
-
-        // stores the index of a kmer in a read sequence
-        const std::string& seq(reads[readIndex].second);
-        const unsigned readLen(seq.size());
-
-        // this read is unusable for assembly:
-        if (readLen < wordLength) continue;
-
-        str_uint_map_t& readWordOffset(readWordOffsets[readIndex]);
-
-        for (unsigned j(0); j<=(readLen-wordLength); ++j)
-        {
-            const std::string word(seq.substr(j,wordLength));
-            if (readWordOffset.find(word) != readWordOffset.end())
-            {
-                // try again with different k-mer size
-#ifdef DEBUG_ASBL
-                log_os << logtag << "word " << word << " repeated in read " << readIndex << "\n";
-#endif
-                return false;
-            }
-
-            // record (0-indexed) start point for word in read
-            //std::cerr << "Recording " << word << " at " << j << " in " << seq <<  "\n";
-            readWordOffset[word]=j;
-
-            // count occurrences
-            ++wordCount[word];
-            /*if (wordCount[word]>maxWordCount)
-            {
-                maxWordCount  = wordCount[word];
-                maxWord = word;
-            }*/
-
-            if(reads[readIndex].first<firstWordPos && j==0) {
-            	firstWord = word;
-            	firstWordPos = reads[readIndex].first;
-            }
-        }
-    }
-
-/*    if (maxWordCount < opt.minCoverage)
-    {
-#ifdef DEBUG_ASBL
-        log_os << logtag << "Coverage too low : " << maxWordCount << " " << opt.minCoverage << "\n";
-#endif
-        return false;
-    }
-*/
 
 #ifdef DEBUG_ASBL
     //log_os << logtag << "Seeding kmer : " << maxWord << "\n";
@@ -449,8 +513,8 @@ buildContigs(
     //walk(opt,firstWord,wordLength,wordCount,contig.seq);
 
 
-    Assembly contigSeq;
-    initDFS(wordCount,firstWord,wordLength,contigSeq
+    Assembly contigs;
+    initDFS(wordHash,firstWord,wordLength,contigs
 #ifdef DEBUG_ASBL
     , iteration
 #endif
@@ -461,13 +525,13 @@ buildContigs(
         std::cerr << "ASSEMBLED CTG " << *ct << "\n";
     }*/
 
-    assert(contigSeq.size() != 0);
+    assert(contigs.size() != 0);
     //contig.seedReadCount = maxWordCount;
 
     // done with this now:
-    wordCount.clear();
+    wordHash.clear();
 
-    for (Assembly::iterator ctgIter = contigSeq.begin(); ctgIter != contigSeq.end(); ++ctgIter)
+    for (Assembly::iterator ctgIter = contigs.begin(); ctgIter != contigs.end(); ++ctgIter)
     {
 
         // throw away short stuff

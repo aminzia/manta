@@ -23,7 +23,7 @@
 #include "SVScorerPairOptions.hh"
 #include "SVScorePairProcessor.hh"
 
-#include "assembly/AssembledContig.hh"
+#include "assembly/Contig.hh"
 #include "blt_util/bam_streamer.hh"
 #include "blt_util/bam_header_info.hh"
 #include "blt_util/qscore_snp.hh"

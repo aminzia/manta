@@ -53,6 +53,3 @@ typedef std::vector<Contig> Assembly;
 
 std::ostream& operator<<(std::ostream& os, const Contig& contig);
 
-
-//typedef std::vector<AssembledContig> Assembly;
-
