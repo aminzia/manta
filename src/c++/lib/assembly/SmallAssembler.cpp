@@ -48,7 +48,7 @@ typedef boost::unordered_map<std::string,bool> str_bool_map_t;
 
 static const std::string alphabet("ACGT");
 
-//static const unsigned MIN_KMER_FREQ = 1;
+static const unsigned MIN_KMER_FREQ = 1;
 
 
 /**
@@ -80,6 +80,9 @@ getEnd(const std::string& contig,
 {
 
     const unsigned csize(contig.size());
+    /*if(length <= csize) {
+        std::cout << "contig=" << contig << std::endl;
+    }*/
     assert(length <= csize);
 
     if (isEnd) return contig.substr((csize-length),length);
@@ -109,9 +112,10 @@ dumpHash(const str_uint_map_t& wordCount,
 	outTxtFile.open(txtFileName.c_str());
 
 	// kmer nodes with coverage higher than this get a different color
-	static const int lowCovGraphVisThreshold(3);
-	static const std::string lowCovNodeColor("green");
-	static const std::string highCovNodeColor("red");
+	//static const int lowCovGraphVisThreshold(3);
+	static const int lowCovGraphVisThreshold(MIN_KMER_FREQ);
+	static const std::string lowCovNodeColor("red");
+	static const std::string highCovNodeColor("green");
 
 	outDotFile << "graph {\n";
 	outDotFile << "node [ style = filled ];\n";
@@ -248,6 +252,25 @@ doDFS(const str_uint_map_t& wordCount,
 
 static
 void
+pruneHash(str_uint_map_t& wordCount) 
+{
+    // prune hash, remove singleton k-mers
+    unsigned pruneCnt(0);
+    for (str_uint_map_t::iterator it=wordCount.begin();
+         it!=wordCount.end();) {
+        if(it->second <= MIN_KMER_FREQ)
+        {
+            it = wordCount.erase(it); 
+            ++pruneCnt;
+        } else {
+            ++it;
+        }
+    }
+    //std::cerr << "Pruned " << pruneCnt << " k-mers. Remaining " << wordCount.size() << std::endl;
+}
+
+static
+void
 initDFS(str_uint_map_t& wordCount,
 		const std::string& startVertex,
 		const unsigned wordLength,
@@ -262,19 +285,6 @@ initDFS(str_uint_map_t& wordCount,
     std::cerr << "INIT DFS START " << startVertex << "\n";
 #endif
 
-    // prune hash, remove singleton k-mers
-    /*unsigned pruneCnt(0);
-    for (str_uint_map_t::iterator it=wordCount.begin();
-         it!=wordCount.end();) {
-        if(it->second <= MIN_KMER_FREQ)
-        {
-            it = wordCount.erase(it); 
-            ++pruneCnt;
-        } else {
-            ++it;
-        }
-    }
-    std::cerr << "Pruned " << pruneCnt << " k-mers. Remaining " << wordCount.size() << std::endl;*/
 
 #ifdef DEBUG_ASBL
     dumpHash(wordCount,wordLength,iteration);
@@ -283,113 +293,10 @@ initDFS(str_uint_map_t& wordCount,
 	str_bool_map_t seenVertices;
 	Contig ctg;
 	ctg.seq = startVertex;
-	ctg.avgCoverage = 0;
+	ctg.avgCoverage = wordCount[startVertex];
+    ctg.numKmers = 1;
 	doDFS(wordCount, ctg, wordLength, seenVertices, contigs);
 }
-
-
-#if 0
-/**
- * Extends the seed contig (aka most frequent k-mer)
- *
- */
-static
-void
-walk(const SmallAssemblerOptions& opt,
-     const std::string& seed,
-     const unsigned wordLength,
-     const str_uint_map_t& wordCount,
-     std::string& contig)
-{
-    // we start with the seed
-    contig = seed;
-
-#ifdef DEBUG_ASBL
-    dumpHash(wordCount,wordLength,1);
-#endif
-
-    std::set<std::string> seenBefore;	// records k-mers already encountered during extension
-    seenBefore.insert(contig);
-
-    const str_uint_map_t::const_iterator wordCountEnd(wordCount.end());
-
-    // 0 => walk to the right, 1 => walk to the left
-    for (unsigned mode(0); mode<2; ++mode)
-    {
-        const bool isEnd(mode==0);
-
-        while (true)
-        {
-            const std::string tmp(getEnd(contig, wordLength-1, isEnd));
-
-#ifdef DEBUG_ASBL
-            log_os << "# current contig : " << contig << " size : " << contig.size() << "\n"
-                   << " getEnd : " << tmp << "\n";
-#endif
-
-            if (seenBefore.count(tmp))
-            {
-#ifdef DEBUG_ASBL
-                log_os << "Seen word " << tmp << " before on this walk, terminating" << "\n";
-#endif
-                break;
-            }
-
-            seenBefore.insert(tmp);
-
-            unsigned maxBaseCount(0);
-            unsigned totalBaseCount(0);
-            char maxBase(alphabet[0]);
-
-            BOOST_FOREACH(const char symbol, alphabet)
-            {
-                const std::string newKey(addBase(tmp, symbol, isEnd));
-                const str_uint_map_t::const_iterator wordCountIter(wordCount.find(newKey));
-                if (wordCountIter == wordCountEnd) continue;
-#ifdef DEBUG_ASBL
-                log_os << "Extending end : base " << symbol << " " << newKey << " " << wordCountIter->second  << "\n";
-#endif
-
-                const unsigned val(wordCountIter->second);
-                totalBaseCount += val;
-                if (val > maxBaseCount)
-                {
-                    maxBaseCount  = val;
-                    maxBase = symbol;
-                }
-            }
-#ifdef DEBUG_ASBL
-            log_os << "Winner is : " << maxBase << " with " << maxBaseCount << " occurrences." << "\n";
-#endif
-
-            if ((maxBaseCount < opt.minCoverage) ||
-                (maxBaseCount < (1.- opt.maxError)* totalBaseCount))
-            {
-#ifdef DEBUG_ASBL
-                log_os << "Coverage or error rate below threshold.\n"
-                       << "maxBaseCount : " << maxBaseCount << " minCverage: " << opt.minCoverage << "\n"
-                       << "error threshold: " << ((1.0-opt.maxError)* totalBaseCount) << "\n";
-#endif
-                break;
-            }
-
-            /// double check that word exists in reads at least once:
-            if (maxBaseCount == 0) break;
-
-#ifdef DEBUG_ASBL
-            log_os << "Adding base " << contig << " " << maxBase << " " << mode << "\n";
-#endif
-            contig = addBase(contig,maxBase,isEnd);
-#ifdef DEBUG_ASBL
-            log_os << "New contig: " << contig << "\n";
-#endif
-        }
-#ifdef DEBUG_ASBL
-        log_os << "mode change. Current mode " << mode << "\n";
-#endif
-    }
-}
-#endif
 
 static
 bool
@@ -501,10 +408,84 @@ buildContigs(
     //std::string maxWord;
 
 
+    for (unsigned readIndex(0);readIndex<readCount; ++readIndex)
+    {
+        const AssemblyReadInfo& rinfo(readInfo[readIndex]);
+
+        // skip reads used in a previous iteration
+        if (rinfo.isUsed) continue;
+
+        // stores the index of a kmer in a read sequence
+        const std::string& seq(reads[readIndex].second);
+        const unsigned readLen(seq.size());
+
+        // this read is unusable for assembly:
+        if (readLen < wordLength) continue;
+
+        str_uint_map_t& readWordOffset(readWordOffsets[readIndex]);
+
+        for (unsigned j(0); j<=(readLen-wordLength); ++j)
+        {
+            const std::string word(seq.substr(j,wordLength));
+            if (readWordOffset.find(word) != readWordOffset.end())
+            {
+                // try again with different k-mer size
+#ifdef DEBUG_ASBL
+                log_os << logtag << "word " << word << " repeated in read " << readIndex << "\n";
+#endif
+                return false;
+            }
+
+            // record (0-indexed) start point for word in read
+            //std::cerr << "Recording " << word << " at " << j << " in " << seq <<  "\n";
+            readWordOffset[word]=j;
+
+            // count occurrences
+            ++wordCount[word];
+            /*if (wordCount[word]>maxWordCount)
+            {
+                maxWordCount  = wordCount[word];
+                maxWord = word;
+            }*/
+
+        }
+    }
+
+    // check if this is needed
+    //log_os << logtag << " pruneHash size before pruning = " << wordCount.size() << "\n";
+    pruneHash(wordCount);
+    //log_os << logtag << " pruneHash size after pruning = " << wordCount.size() << "\n";
+
+
+    int firstWordPos(std::numeric_limits<int>::max());
+    std::string firstWord("NA");
+    for (unsigned readIndex(0);readIndex<readCount; ++readIndex)
+    {
+        const std::string& seq(reads[readIndex].second);
+        const unsigned readLen(seq.size());
+
+        for (unsigned j(0); j<=(readLen-wordLength); ++j)
+        {
+            const std::string word(seq.substr(j,wordLength));
+            bool wordInHash(wordCount.find(word) != wordCount.end());
+            if(reads[readIndex].first<firstWordPos && j==0 && wordInHash ) {
+                firstWord = word;
+                firstWordPos = reads[readIndex].first;
+            }
+        }
+    }
+
+    if (firstWord == "NA")
+    {
+#ifdef DEBUG_ASBL
+        log_os << logtag << " No words left after pruning :" << wordCount.size() << "\n";
+#endif
+        return false;
+    }
 
 #ifdef DEBUG_ASBL
     //log_os << logtag << "Seeding kmer : " << maxWord << "\n";
-    log_os << logtag << "Seeding kmer : " << firstWord << "\n";
+    log_os << logtag << "Seeding kmer : " << firstWord << " cov=" << wordCount[firstWord] << "\n";
 #endif
 
     // start initial assembly with most frequent kmer as seed
@@ -533,10 +514,6 @@ buildContigs(
 
     for (Assembly::iterator ctgIter = contigs.begin(); ctgIter != contigs.end(); ++ctgIter)
     {
-
-        // throw away short stuff
-        if (ctgIter->seq.length() < 100) continue;
-
         //AssembledContig contig;
         //contig.seq = ctgIter->sequence;
 
@@ -568,6 +545,9 @@ buildContigs(
                 }
             }
         }
+
+        // throw away short stuff
+        if (ctgIter->seq.length() < 100) continue;
         finalContigs.push_back(*ctgIter);
     }
 
