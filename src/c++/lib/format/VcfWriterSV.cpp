@@ -87,6 +87,8 @@ writeHeaderPrefix(
     _os << "##INFO=<ID=BND_PAIR_COUNT,Number=1,Type=Integer,Description=\"Confidently mapped reads supporting this variant at this breakend (mapping may not be confident at remote breakend)\">\n";
     _os << "##INFO=<ID=UPSTREAM_PAIR_COUNT,Number=1,Type=Integer,Description=\"Confidently mapped reads supporting this variant at the upstream breakend (mapping may not be confident at downstream breakend)\">\n";
     _os << "##INFO=<ID=DOWNSTREAM_PAIR_COUNT,Number=1,Type=Integer,Description=\"Confidently mapped reads supporting this variant at this downstream breakend (mapping may not be confident at upstream breakend)\">\n";
+    _os << "##INFO=<ID=INV3,Number=0,Type=Flag,Description=\"Inversion breakends open 3' of reported location\">\n";
+    _os << "##INFO=<ID=INV5,Number=0,Type=Flag,Description=\"Inversion breakends open 5' of reported location\">\n";
 
     addHeaderInfo();
 
@@ -470,7 +472,7 @@ writeInvdel(
     // complex in/del combinations
     //
     bool isSmallVariant(false);
-    if ((! isImprecise) && isIndel)
+    if ((! isImprecise) && isIndel && (! sv.isUnknownSizeInsertion))
     {
         const unsigned deleteSize(bpBrange.begin_pos() - bpArange.begin_pos());
         const unsigned insertSize(sv.insertSeq.size());
@@ -539,19 +541,23 @@ writeInvdel(
         infoTags.push_back( str(boost::format("SVTYPE=%s") % words[0]));
         const pos_t refLen(endPos-pos);
         pos_t svLen(refLen);
-        if (isIndel)
+
+        if (! sv.isUnknownSizeInsertion)
         {
-            const pos_t insertLen(static_cast<pos_t>(sv.insertSeq.size()));
-            if ( insertLen > refLen )
+            if (isIndel)
             {
-                svLen = insertLen;
+                const pos_t insertLen(static_cast<pos_t>(sv.insertSeq.size()));
+                if ( insertLen > refLen )
+                {
+                    svLen = insertLen;
+                }
+                else
+                {
+                    svLen = -refLen;
+                }
             }
-            else
-            {
-                svLen = -refLen;
-            }
+            infoTags.push_back( str(boost::format("SVLEN=%i") % (svLen)));
         }
-        infoTags.push_back( str(boost::format("SVLEN=%i") % (svLen)));
     }
     infoTags.push_back( str(boost::format("UPSTREAM_PAIR_COUNT=%i") % bpA.getLocalPairCount()) );
     infoTags.push_back( str(boost::format("DOWNSTREAM_PAIR_COUNT=%i") % bpB.getLocalPairCount()) );
@@ -600,7 +606,7 @@ writeInvdel(
 
     if (! isSmallVariant)
     {
-        if (! sv.insertSeq.empty())
+        if (! (sv.insertSeq.empty() || sv.isUnknownSizeInsertion))
         {
             infoTags.push_back( str( boost::format("SVINSLEN=%i") % (sv.insertSeq.size()) ));
             if (isBp1First || (bpA.state != bpB.state))
@@ -611,6 +617,22 @@ writeInvdel(
             {
                 infoTags.push_back( str( boost::format("SVINSSEQ=%s") % reverseCompCopyStr(sv.insertSeq) ));
             }
+        }
+    }
+
+    if (label == "INV")
+    {
+        if (sv.bp1.state == SVBreakendState::RIGHT_OPEN)
+        {
+            infoTags.push_back("INV3");
+        }
+        else if (sv.bp1.state == SVBreakendState::LEFT_OPEN)
+        {
+            infoTags.push_back("INV5");
+        }
+        else
+        {
+            assert(false && "Unexpected inversion configuration");
         }
     }
 
