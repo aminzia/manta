@@ -392,7 +392,6 @@ buildContigs(
     }
 #endif
 
-    std::string firstWord;
     const unsigned readCount(reads.size());
 
     // a set of read hashes; each read hash stores the starting positions of all kmers in the read
@@ -400,6 +399,7 @@ buildContigs(
 
     // counts the number of occurrences for each kmer in all reads
     str_uint_map_t wordHash;
+    std::string firstWord("NA");
 
     buildHash(wordHash,firstWord,readWordOffsets,readInfo,reads,wordLength);
 
@@ -441,7 +441,7 @@ buildContigs(
             readWordOffset[word]=j;
 
             // count occurrences
-            ++wordCount[word];
+            ++wordHash[word];
             /*if (wordCount[word]>maxWordCount)
             {
                 maxWordCount  = wordCount[word];
@@ -453,12 +453,11 @@ buildContigs(
 
     // check if this is needed
     //log_os << logtag << " pruneHash size before pruning = " << wordCount.size() << "\n";
-    pruneHash(wordCount);
+    pruneHash(wordHash);
     //log_os << logtag << " pruneHash size after pruning = " << wordCount.size() << "\n";
 
 
     int firstWordPos(std::numeric_limits<int>::max());
-    std::string firstWord("NA");
     for (unsigned readIndex(0);readIndex<readCount; ++readIndex)
     {
         const std::string& seq(reads[readIndex].second);
@@ -467,7 +466,7 @@ buildContigs(
         for (unsigned j(0); j<=(readLen-wordLength); ++j)
         {
             const std::string word(seq.substr(j,wordLength));
-            bool wordInHash(wordCount.find(word) != wordCount.end());
+            bool wordInHash(wordHash.find(word) != wordHash.end());
             if(reads[readIndex].first<firstWordPos && j==0 && wordInHash ) {
                 firstWord = word;
                 firstWordPos = reads[readIndex].first;

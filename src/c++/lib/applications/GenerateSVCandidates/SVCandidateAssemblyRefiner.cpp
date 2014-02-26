@@ -680,18 +680,18 @@ processLargeInsertion(
         assemblyData.smallSVSegments.resize(contigCount+1);
         assemblyData.extendedContigs.resize(contigCount+1);
 
-        AssembledContig& fakeContig(assemblyData.contigs[contigCount]);
+        Contig& fakeContig(assemblyData.contigs[contigCount]);
         SVCandidateAssemblyData::SmallAlignmentResultType& fakeAlignment(assemblyData.smallSVAlignments[contigCount]);
         std::vector<std::pair<unsigned,unsigned> >& fakeSegments(assemblyData.smallSVSegments[contigCount]);
         std::string& fakeExtendedContig(assemblyData.extendedContigs[contigCount]);
 
-        const AssembledContig& leftContig(assemblyData.contigs[largeInsertionLeftIndex]);
-        const AssembledContig& rightContig(assemblyData.contigs[largeInsertionRightIndex]);
+        const Contig& leftContig(assemblyData.contigs[largeInsertionLeftIndex]);
+        const Contig& rightContig(assemblyData.contigs[largeInsertionRightIndex]);
 
         fakeContig=leftContig;
         fakeContig.seq += (middle + rightContig.seq);
 
-        const AssembledContig& constFakeContig(fakeContig);
+        const Contig& constFakeContig(fakeContig);
 
         smallSVAligner.align(
             constFakeContig.seq.begin(), constFakeContig.seq.end(),

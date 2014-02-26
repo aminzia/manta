@@ -21,10 +21,6 @@ import re
 
 
 
-<<<<<<< HEAD
-def getKeyVal(string,key) :
-    match=re.search("%s=([^;\t]*);?" % (key) ,string)
-=======
 def isInfoFlag(infoString,key) :
     word=infoString.split(";")
     for w in word :
@@ -33,7 +29,6 @@ def isInfoFlag(infoString,key) :
 
 def getKeyVal(infoString,key) :
     match=re.search("%s=([^;\t]*);?" % (key) ,infoString)
->>>>>>> master
     if match is None : return None
     return match.group(1);
 

@@ -952,11 +952,7 @@ computeSomaticSampleLoghood(
         bool isRead1Evaluated(true);
         bool isRead2Evaluated(true);
 
-<<<<<<< HEAD
-        if (! getRefAltFromFrag(smallSVWeight, semiMappedPower, chimeraProb, refSplitMapProb, altSplitMapProb, fragev,
-=======
         if (! getRefAltFromFrag(smallSVWeight, semiMappedPower, chimeraProb, refSplitMapProb, altSplitMapProb, isPermissive, fragLabel, fragev,
->>>>>>> master
                                 refLnLhoodSet, altLnLhoodSet, isRead1Evaluated, isRead2Evaluated))
         {
             // continue if this fragment was not evaluated for pair or split support for either allele:
@@ -1054,17 +1050,11 @@ scoreSomaticSV(
         const ProbSet& altSplitMapProb( isPermissive ? altSplitMapProbPermissive : altSplitMapProbDefault );
 
         // compute likelihood for the fragments from the tumor sample
-<<<<<<< HEAD
-        computeSomaticSampleLoghood(smallSVWeight, evidence.tumor, somaticMutationFreq, noiseMutationFreq, isPermissive, tumorSomaticLhood);
-        // compute likelihood for the fragments from the normal sample
-        computeSomaticSampleLoghood(smallSVWeight, evidence.normal, 0, noiseMutationFreq, isPermissive, normalSomaticLhood);
-=======
         computeSomaticSampleLoghood(smallSVWeight, evidence.tumor, somaticMutationFreq, noiseMutationFreq, isPermissive,
                                     chimeraProbDefault, refSplitMapProb, altSplitMapProbDefault, tumorSomaticLhood);
         // compute likelihood for the fragments from the normal sample
         computeSomaticSampleLoghood(smallSVWeight, evidence.normal, 0, noiseMutationFreq, isPermissive,
                                     chimeraProb, refSplitMapProb, altSplitMapProb, normalSomaticLhood);
->>>>>>> master
 
         boost::array<double,SOMATIC_GT::SIZE> somaticPprob;
         for (unsigned gt(0); gt<SOMATIC_GT::SIZE; ++gt)
