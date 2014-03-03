@@ -511,6 +511,8 @@ buildContigs(
     readWordOffsets.clear();
 
     //contigs.push_back(contig);
+    if (finalContigs.size() == 0) return false;
+
     return true;
 }
 
