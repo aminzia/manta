@@ -467,6 +467,7 @@ buildContigs(
 
     // done with this now:
     wordHash.clear();
+    static unsigned READ_LENGTH = 100;
 
     for (Assembly::iterator ctgIter = contigs.begin(); ctgIter != contigs.end(); ++ctgIter)
     {
@@ -503,7 +504,7 @@ buildContigs(
         }
 
         // throw away short stuff
-        if (ctgIter->seq.length() < 100) continue;
+        if (ctgIter->seq.length() <= READ_LENGTH) continue;
         finalContigs.push_back(*ctgIter);
     }
 
@@ -513,6 +514,12 @@ buildContigs(
     //contigs.push_back(contig);
     if (finalContigs.size() == 0) return false;
 
+    /*std::cerr << "FinalContig size = " << finalContigs.size() << "\n";
+    for(Assembly::const_iterator ct = finalContigs.begin(); ct!= finalContigs.end(); ++ct) {
+        std::cerr << ct->seq << "\n";
+
+    }
+    std::cerr << "Returning true \n";*/
     return true;
 }
 
@@ -547,11 +554,13 @@ runSmallAssembler(
         for (; wordLength<=opt.maxWordLength; wordLength+=opt.wordStepSize)
         {
             //std::cerr << "Starting assembly with k=" << wordLength << " iter= " << iteration << "\n";
+            //std::cerr << "opt.minWordLength=" << opt.minWordLength << " opt.maxWordLength " << opt.maxWordLength << std::endl;  
             const bool isAssemblySuccess = buildContigs(opt, reads, assembledReadInfo, wordLength, contigs, unusedReads
 #ifdef DEBUG_ASBL
             , iteration
 #endif
             );
+            std::cerr << "isAssemblySuccess=" << isAssemblySuccess << std::endl;
             if (isAssemblySuccess) break;
         }
 
