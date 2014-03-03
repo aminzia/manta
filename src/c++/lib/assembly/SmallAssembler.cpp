@@ -113,7 +113,7 @@ dumpHash(const str_uint_map_t& wordCount,
 
 	// kmer nodes with coverage higher than this get a different color
 	//static const int lowCovGraphVisThreshold(3);
-	static const int lowCovGraphVisThreshold(MIN_KMER_FREQ);
+	static const unsigned lowCovGraphVisThreshold(MIN_KMER_FREQ);
 	static const std::string lowCovNodeColor("red");
 	static const std::string highCovNodeColor("green");
 
@@ -244,7 +244,7 @@ doDFS(const str_uint_map_t& wordCount,
 	if (!neighbourFound) {
 		// at the end of a branch, save contig
 #ifdef DEBUG_ASBL
-		std::cerr << "Branch end: ctg=" << contigSoFar.sequence << " cov=" << contigSoFar.avgCoverage << " numKmers=" << contigSoFar.numKmers << " len=" << contigSoFar.sequence.size() << std::endl;
+		std::cerr << "Branch end: ctg=" << contigSoFar.seq << " cov=" << contigSoFar.avgCoverage << " numKmers=" << contigSoFar.numKmers << " len=" << contigSoFar.seq.size() << std::endl;
 #endif
 		contigs.push_back(contigSoFar);
 	}
@@ -332,13 +332,16 @@ buildHash(str_uint_map_t& wordHash,
 	        {
 	        	// try again with different k-mer size
 	#ifdef DEBUG_ASBL
-	            log_os << logtag << "word " << word << " repeated in read " << readIndex << "\n";
+	            log_os << " word " << word << " repeated in read " << readIndex << "\n";
+                log_os << " res = " << readWordOffset.find(word)->second << "\n";
 	#endif
-	                return false;
+	            return false;
 	        }
 
 			// record (0-indexed) start point for word in read
-			//std::cerr << "Recording " << word << " at " << j << " in " << seq <<  "\n";
+	        #ifdef DEBUG_ASBL
+			log_os << "Recording " << word << " at " << j << " in " << seq <<  "\n";
+	        #endif
 			readWordOffset[word]=j;
 
 			// count occurrences
@@ -381,12 +384,10 @@ buildContigs(
 #endif
     )
 {
-
-
 #ifdef DEBUG_ASBL
     static const std::string logtag("buildContigs: ");
-    log_os << logtag << "In SmallAssembler::buildContig. word length=" << wordLength << " readCount: " << readCount << "\n";
-    for (unsigned readIndex(0); readIndex<readCount; ++readIndex)
+    log_os << logtag << "In SmallAssembler::buildContig. word length=" << wordLength << " number of reads " << reads.size() << "\n";
+    for (unsigned readIndex(0); readIndex<reads.size(); ++readIndex)
     {
         log_os << reads[readIndex].first << "  " << reads[readIndex].second << " used=" << readInfo[readIndex].isUsed << "\n";
     }
@@ -406,50 +407,6 @@ buildContigs(
     // most frequent kmer and its number of occurrences
     //unsigned maxWordCount(0);
     //std::string maxWord;
-
-
-    for (unsigned readIndex(0);readIndex<readCount; ++readIndex)
-    {
-        const AssemblyReadInfo& rinfo(readInfo[readIndex]);
-
-        // skip reads used in a previous iteration
-        if (rinfo.isUsed) continue;
-
-        // stores the index of a kmer in a read sequence
-        const std::string& seq(reads[readIndex].second);
-        const unsigned readLen(seq.size());
-
-        // this read is unusable for assembly:
-        if (readLen < wordLength) continue;
-
-        str_uint_map_t& readWordOffset(readWordOffsets[readIndex]);
-
-        for (unsigned j(0); j<=(readLen-wordLength); ++j)
-        {
-            const std::string word(seq.substr(j,wordLength));
-            if (readWordOffset.find(word) != readWordOffset.end())
-            {
-                // try again with different k-mer size
-#ifdef DEBUG_ASBL
-                log_os << logtag << "word " << word << " repeated in read " << readIndex << "\n";
-#endif
-                return false;
-            }
-
-            // record (0-indexed) start point for word in read
-            //std::cerr << "Recording " << word << " at " << j << " in " << seq <<  "\n";
-            readWordOffset[word]=j;
-
-            // count occurrences
-            ++wordHash[word];
-            /*if (wordCount[word]>maxWordCount)
-            {
-                maxWordCount  = wordCount[word];
-                maxWord = word;
-            }*/
-
-        }
-    }
 
     // check if this is needed
     //log_os << logtag << " pruneHash size before pruning = " << wordCount.size() << "\n";
@@ -477,14 +434,14 @@ buildContigs(
     if (firstWord == "NA")
     {
 #ifdef DEBUG_ASBL
-        log_os << logtag << " No words left after pruning :" << wordCount.size() << "\n";
+        log_os << logtag << " No words left after pruning :" << wordHash.size() << "\n";
 #endif
         return false;
     }
 
 #ifdef DEBUG_ASBL
     //log_os << logtag << "Seeding kmer : " << maxWord << "\n";
-    log_os << logtag << "Seeding kmer : " << firstWord << " cov=" << wordCount[firstWord] << "\n";
+    log_os << logtag << "Seeding kmer : " << firstWord << " cov=" << wordHash[firstWord] << "\n";
 #endif
 
     // start initial assembly with most frequent kmer as seed
