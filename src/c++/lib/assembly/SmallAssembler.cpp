@@ -560,7 +560,7 @@ runSmallAssembler(
             , iteration
 #endif
             );
-            std::cerr << "isAssemblySuccess=" << isAssemblySuccess << std::endl;
+            //std::cerr << "isAssemblySuccess=" << isAssemblySuccess << std::endl;
             if (isAssemblySuccess) break;
         }
 
