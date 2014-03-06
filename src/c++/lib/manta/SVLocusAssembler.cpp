@@ -359,7 +359,7 @@ assembleSingleSVBreakend(
     AssemblyReadInput reads;
     getBreakendReads(bp, isBpReversed, refSeq, readIndex, reads);
     AssemblyReadOutput readInfo;
-    runSmallAssembler(_assembleOpt, reads, readInfo, as);
+    runSmallAssembler(_assembleOpt, reads, refSeq.seq(), readInfo, as);
 }
 
 
@@ -376,12 +376,12 @@ assembleSVBreakends(const SVBreakend& bp1,
 {
     ReadIndexType readIndex;
     AssemblyReadInput reads;
-    AssemblyReadReversal readRev;
+    //AssemblyReadReversal readRev;
     getBreakendReads(bp1, isBp1Reversed, refSeq1, readIndex, reads);
-    readRev.resize(reads.size(),isBp1Reversed);
+    //readRev.resize(reads.size(),isBp1Reversed);
     getBreakendReads(bp2, isBp2Reversed, refSeq2, readIndex, reads);
-    readRev.resize(reads.size(),isBp2Reversed);
+    //readRev.resize(reads.size(),isBp2Reversed);
     AssemblyReadOutput readInfo;
-    runSmallAssembler(_assembleOpt, reads, readInfo, as);
+    runSmallAssembler(_assembleOpt, reads, refSeq1.seq(), readInfo, as);
 }
 

@@ -378,7 +378,8 @@ buildContigs(
     AssemblyReadOutput& readInfo,
     const unsigned wordLength,
     Assembly& finalContigs,
-    unsigned& unusedReads
+    unsigned& unusedReads,
+    const std::string& refSeq
 #ifdef DEBUG_ASBL
     , const unsigned iteration
 #endif
@@ -413,28 +414,40 @@ buildContigs(
     pruneHash(wordHash);
     //log_os << logtag << " pruneHash size after pruning = " << wordCount.size() << "\n";
 
-
-    int firstWordPos(std::numeric_limits<int>::max());
-    for (unsigned readIndex(0);readIndex<readCount; ++readIndex)
-    {
-        const std::string& seq(reads[readIndex].second);
-        const unsigned readLen(seq.size());
-
-        for (unsigned j(0); j<=(readLen-wordLength); ++j)
-        {
-            const std::string word(seq.substr(j,wordLength));
-            bool wordInHash(wordHash.find(word) != wordHash.end());
-            if(reads[readIndex].first<firstWordPos && j==0 && wordInHash ) {
-                firstWord = word;
-                firstWordPos = reads[readIndex].first;
-            }
-        }
+    unsigned const refSeqLen(refSeq.size());
+    assert(wordLength < refSeq.size());
+    for(unsigned i(0);i<(refSeqLen-wordLength);++i) {
+    	std::string refKmer(refSeq.substr(i,wordLength));
+    	assert(refKmer.size() == wordLength);
+    	if(wordHash.find(refKmer) != wordHash.end()) {
+    		std::cout << "Bingo!! Ref k-mer found " << std::endl;
+    		firstWord = refKmer;
+    	}
     }
+
+
+//    int firstWordPos(std::numeric_limits<int>::max());
+//    for (unsigned readIndex(0);readIndex<readCount; ++readIndex)
+//    {
+//        const std::string& seq(reads[readIndex].second);
+//        const unsigned readLen(seq.size());
+//
+//        for (unsigned j(0); j<=(readLen-wordLength); ++j)
+//        {
+//            const std::string word(seq.substr(j,wordLength));
+//            bool wordInHash(wordHash.find(word) != wordHash.end());
+//            if(reads[readIndex].first<firstWordPos && j==0 && wordInHash ) {
+//                firstWord = word;
+//                firstWordPos = reads[readIndex].first;
+//            }
+//        }
+//    }
 
     if (firstWord == "NA")
     {
 #ifdef DEBUG_ASBL
-        log_os << logtag << " No words left after pruning :" << wordHash.size() << "\n";
+    	log_os << logtag << " Empty seed word. \n";
+        log_os << logtag << " Words left after pruning :" << wordHash.size() << "\n";
 #endif
         return false;
     }
@@ -529,6 +542,7 @@ void
 runSmallAssembler(
     const SmallAssemblerOptions& opt,
     const AssemblyReadInput& reads,
+    const std::string& refSeq,
     AssemblyReadOutput& assembledReadInfo,
     Assembly& contigs)
 {
@@ -555,7 +569,7 @@ runSmallAssembler(
         {
             //std::cerr << "Starting assembly with k=" << wordLength << " iter= " << iteration << "\n";
             //std::cerr << "opt.minWordLength=" << opt.minWordLength << " opt.maxWordLength " << opt.maxWordLength << std::endl;  
-            const bool isAssemblySuccess = buildContigs(opt, reads, assembledReadInfo, wordLength, contigs, unusedReads
+            const bool isAssemblySuccess = buildContigs(opt, reads, assembledReadInfo, wordLength, contigs, unusedReads, refSeq
 #ifdef DEBUG_ASBL
             , iteration
 #endif

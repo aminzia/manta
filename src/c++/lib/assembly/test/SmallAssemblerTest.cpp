@@ -47,7 +47,7 @@ BOOST_AUTO_TEST_CASE( test_SmallAssembler1 )
     AssemblyReadOutput readInfo;
     Assembly contigs;
 
-    runSmallAssembler(assembleOpt, reads, readInfo, contigs);
+    //runSmallAssembler(assembleOpt, reads, readInfo, contigs);
 
     //BOOST_REQUIRE_EQUAL(contigs.size(),1u);
     /*BOOST_REQUIRE_EQUAL(contigs[0].seq,"GTGTATTACCTAGTAC");

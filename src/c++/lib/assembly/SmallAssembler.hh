@@ -35,6 +35,7 @@ void
 runSmallAssembler(
     const SmallAssemblerOptions& opt,
     const AssemblyReadInput& reads,
+    const std::string& refseq,
     AssemblyReadOutput& assembledReadInfo,
     Assembly& contigs);
 
