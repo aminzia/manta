@@ -420,8 +420,9 @@ buildContigs(
     	std::string refKmer(refSeq.substr(i,wordLength));
     	assert(refKmer.size() == wordLength);
     	if(wordHash.find(refKmer) != wordHash.end()) {
-    		std::cout << "Bingo!! Ref k-mer found " << std::endl;
+    		//std::cout << "Bingo!! Ref k-mer found " << std::endl;
     		firstWord = refKmer;
+            break;
     	}
     }
 
