@@ -24,7 +24,7 @@ struct SmallAssemblerOptions
 {
     /// sets reasonable default values for 30x DNA-seq, 100-150bp reads
     SmallAssemblerOptions() :
-        minWordLength(31),
+        minWordLength(41),
         maxWordLength(76),
         wordStepSize(5),
         minContigLength(15),
