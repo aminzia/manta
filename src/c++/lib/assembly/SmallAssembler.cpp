@@ -213,35 +213,33 @@ doDFS(const str_uint_map_t& wordCount,
 	  str_bool_map_t& seenVertices,
 	  std::vector<Contig>& contigs) {
 
-	// we walk only to the left
-	static const bool isEnd(true);
+    bool neighbourFound(false);
+	for (unsigned mode(0); mode<2; ++mode)
+	{
+		const bool isEnd(mode==0);
+		std::string tmp(getEnd(contigSoFar.seq,wordLength-1,isEnd));
 
-	std::string tmp(getEnd(contigSoFar.seq,wordLength-1,isEnd));
-	bool neighbourFound(false);
-	BOOST_FOREACH(const char symbol, alphabet) {
-		const std::string overlap(addBase(tmp,symbol,isEnd));
-		//std::cerr << "Testing branch " << overlap << " " << symbol << "\n";
-        //typedef std::pair<str_uint_map_t::const_iterator,str_uint_map_t::const_iterator> iterPair;
-        //iterPair itP = wordCount.equal_range(overlap);
-        //std::cerr << "Hits=" << distance(itP.first,itP.second) << "\n";
+		BOOST_FOREACH(const char symbol, alphabet) {
+			const std::string overlap(addBase(tmp,symbol,isEnd));
 
-        //TODO:: this follows all branches regardless of coverage
-        // need to see if this is a good thing
-		str_uint_map_t::const_iterator ct = wordCount.find(overlap);
-	    if (ct != wordCount.end() && !seenVertices[overlap]) {
-	        seenVertices[overlap] = true;
-	        // copy contig sequence
-	    	Contig newCtg(contigSoFar);
-	     	newCtg.seq += symbol;
-	     	// update running average of coverage
-	     	newCtg.avgCoverage = (ct->second+newCtg.numKmers*newCtg.avgCoverage)/(newCtg.numKmers+1);
-	     	++newCtg.numKmers;
+			//TODO:: this follows all branches regardless of coverage
+			// need to see if this is a good thing
+			str_uint_map_t::const_iterator ct = wordCount.find(overlap);
+			if (ct != wordCount.end() && !seenVertices[overlap]) {
+				seenVertices[overlap] = true;
+				// copy contig sequence
+				Contig newCtg(contigSoFar);
+				newCtg.seq += symbol;
+				// update running average of coverage
+				newCtg.avgCoverage = (ct->second+newCtg.numKmers*newCtg.avgCoverage)/(newCtg.numKmers+1);
+				++newCtg.numKmers;
 
-	    	//std::cerr << "Extending contig " << symbol << " " << newCtg << "\n";
-	    	doDFS(wordCount,newCtg,wordLength,seenVertices,contigs);
-	    	neighbourFound=true;
+				//std::cerr << "Extending contig " << symbol << " " << newCtg << "\n";
+				doDFS(wordCount,newCtg,wordLength,seenVertices,contigs);
+				neighbourFound=true;
+            }
 	    }
-	}
+	} // end for mode
 	if (!neighbourFound) {
 		// at the end of a branch, save contig
 #ifdef DEBUG_ASBL
