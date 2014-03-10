@@ -124,7 +124,8 @@ dumpHash(const str_uint_map_t& wordCount,
 	for (str_uint_map_t::const_iterator ct = wordCount.begin();ct!=wordCount.end();++ct) {
         aliasH[ct->first] = n++;
         //graphviz out
-		outDotFile << aliasH[ct->first] << "[label=\"cov" << ct->second << "\" ";
+		//outDotFile << aliasH[ct->first] << "[label=\"cov" << ct->second << "\" ";
+		outDotFile << ct->first << "[label=\"cov" << ct->second << "\" ";
 		if (ct->second>lowCovGraphVisThreshold)
 		{
 			outDotFile << "color=" << highCovNodeColor << "]";
